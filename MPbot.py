@@ -16,6 +16,7 @@ BOT = telegram.Bot(token=TELEGRAM_TOKEN)
 GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
 
 DB_FILE = "assinantes.json"
+TEMP_PREFS = "pagamentos_temp.json"
 
 app = Flask(__name__)
 
@@ -34,6 +35,23 @@ def salvar_dados(dados):
     with open(DB_FILE, 'w') as f:
         json.dump(dados, f, indent=4)
 
+def salvar_temp_pagamento(preference_id, telegram_id):
+    if os.path.exists(TEMP_PREFS):
+        with open(TEMP_PREFS, 'r') as f:
+            dados = json.load(f)
+    else:
+        dados = {}
+    dados[preference_id] = telegram_id
+    with open(TEMP_PREFS, 'w') as f:
+        json.dump(dados, f)
+
+def carregar_temp_pagamento(preference_id):
+    if not os.path.exists(TEMP_PREFS):
+        return None
+    with open(TEMP_PREFS, 'r') as f:
+        dados = json.load(f)
+    return dados.get(preference_id)
+
 # Menu do bot
 @app.route("/", methods=["GET", "POST", "HEAD"])
 def webhook():
@@ -51,7 +69,7 @@ def webhook():
                 chat_id=chat_id,
                 text="Bem-vindo ao Bot de Apostas! Clique no botão abaixo para pagar sua assinatura.",
                 reply_markup=telegram.InlineKeyboardMarkup([
-                    [telegram.InlineKeyboardButton("\uD83D\uDCB0 Pagar", callback_data="pagar")]
+                    [telegram.InlineKeyboardButton("💰 Pagar", callback_data="pagar")]
                 ])
             )
 
@@ -70,24 +88,24 @@ def webhook():
                         "unit_price": ASSINATURA_VALOR
                     }
                 ],
-                "payer": {
-                    "email": f"{user_id}@fakeemail.com"
-                },
-                "notification_url": os.getenv("WEBHOOK_URL"),
                 "back_urls": {
                     "success": "https://t.me/seu_bot",
                     "failure": "https://t.me/seu_bot",
                     "pending": "https://t.me/seu_bot"
                 },
-                "auto_return": "approved"
+                "auto_return": "approved",
+                "notification_url": os.getenv("WEBHOOK_URL")
             }
 
             preference = sdk.preference().create(preference_data)
             checkout_url = preference["response"]["init_point"]
+            preference_id = preference["response"]["id"]
 
-            BOT.send_message(chat_id=chat_id, text="\uD83D\uDCB3 Clique no link abaixo para pagar com Mercado Pago:")
+            salvar_temp_pagamento(preference_id, user_id)
+
+            BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
             BOT.send_message(chat_id=chat_id, text=checkout_url)
-            BOT.send_message(chat_id=chat_id, text="\uD83D\uDCA1 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
+            BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
 
     return "ok"
 
@@ -101,13 +119,13 @@ def notificacao():
         payment_info = sdk.payment().get(payment_id)
 
         status = payment_info["response"]["status"]
-        payer_email = payment_info["response"]["payer"]["email"]
-        telegram_id = int(payer_email.split("@")[0])
+        preference_id = payment_info["response"].get("order", {}).get("id") or payment_info["response"].get("preference_id")
+        telegram_id = carregar_temp_pagamento(preference_id)
 
-        if status == "approved":
+        if status == "approved" and telegram_id:
             dados = carregar_dados()
             hoje = datetime.now().strftime("%Y-%m-%d")
-            vencimento = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+            vencimento = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
             dados[str(telegram_id)] = {
                 "pagamento": hoje,
@@ -124,25 +142,23 @@ def notificacao():
 
 def verificar_vencimentos():
     while True:
-        time.sleep(86400)  # Executa 1x por dia
+        time.sleep(86400)
         dados = carregar_dados()
         hoje = datetime.now().strftime("%Y-%m-%d")
 
         for uid, info in list(dados.items()):
             if info["status"] == "ativo":
-                # Avisar com 3 dias de antecedência
                 dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
                 if dias_restantes == 3:
                     try:
                         BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence em 3 dias. Renove para continuar no grupo sem interrupções.")
                     except Exception as e:
                         print(f"Erro ao avisar {uid}: {e}")
-                # Remoção se vencido
                 if info["vencimento"] < hoje:
                     try:
                         BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
                         BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
-                        BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid))  # Permite voltar depois
+                        BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
                     except Exception as e:
                         print(f"Erro ao remover {uid}: {e}")
                     dados[uid]["status"] = "inativo"
