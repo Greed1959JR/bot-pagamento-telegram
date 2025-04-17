@@ -22,7 +22,7 @@ TEMP_PREFS = "pagamentos_temp.json"
 app = Flask(__name__)
 sdk = mercadopago.SDK(ACCESS_TOKEN)
 
-ASSINATURA_VALOR = 5.00
+ASSINATURA_VALOR = 10.00
 DIAS_ASSINATURA = 1
 
 # === Utilitários de Banco de Dados ===
@@ -132,10 +132,18 @@ def processar_pagamento(payment_id):
     print("Processando pagamento:", payment_id)
     payment_info = sdk.payment().get(payment_id)
 
-    status = payment_info["response"]["status"]
-    preference_id = payment_info["response"]["preference_id"]
-    telegram_id = carregar_temp_pagamento(preference_id)
+    response = payment_info.get("response", {})
+    print("=== DEBUG DO PAYMENT_INFO ===")
+    print(json.dumps(response, indent=4))
 
+    status = response.get("status")
+    preference_id = response.get("preference_id")
+
+    if not preference_id:
+        print("❌ Erro: 'preference_id' não encontrado na resposta do pagamento.")
+        return
+
+    telegram_id = carregar_temp_pagamento(preference_id)
     print("Status:", status, " | Preference ID:", preference_id, " | Telegram ID:", telegram_id)
 
     if status == "approved" and telegram_id:
