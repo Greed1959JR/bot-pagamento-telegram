@@ -21,7 +21,7 @@ TEMP_PREFS = "pagamentos_temp.json"
 app = Flask(__name__)
 
 sdk = mercadopago.SDK(ACCESS_TOKEN)
-ASSINATURA_VALOR = 1.00
+ASSINATURA_VALOR = 10.00
 
 # Utilitários para banco de dados
 
