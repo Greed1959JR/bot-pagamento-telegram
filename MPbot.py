@@ -19,10 +19,10 @@ GRUPO_LINK = os.getenv("GRUPO_LINK")
 DB_FILE = "assinantes.json"
 TEMP_PREFS = "pagamentos_temp.json"
 
-app = Flask(__name__)
+app = Flask(name)
 sdk = mercadopago.SDK(ACCESS_TOKEN)
 
-ASSINATURA_VALOR = 1.00
+ASSINATURA_VALOR = 10.00
 DIAS_ASSINATURA = 1
 
 # === Utilitários de Banco de Dados ===
@@ -89,14 +89,10 @@ def webhook():
 
     elif update.callback_query:
         query = update.callback_query
-        query.answer()
-
         user_id = query.from_user.id
         chat_id = query.message.chat.id
 
         if query.data == "pagar":
-            BOT.send_message(chat_id=chat_id, text="🔄 Gerando link de pagamento...")
-
             url_base = os.getenv("WEBHOOK_URL")
             if not url_base.endswith("/notificacao"):
                 url_base += "/notificacao"
@@ -116,10 +112,7 @@ def webhook():
                     "pending": "https://t.me/seu_bot"
                 },
                 "auto_return": "approved",
-                "notification_url": url_base,
-                "metadata": {
-                    "telegram_id": user_id
-                }
+                "notification_url": url_base
             }
 
             preference = sdk.preference().create(preference_data)
@@ -127,8 +120,7 @@ def webhook():
             preference_id = preference["response"]["id"]
 
             salvar_temp_pagamento(preference_id, user_id)
-
-            BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
+BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
             BOT.send_message(chat_id=chat_id, text=checkout_url)
             BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
 
@@ -139,19 +131,12 @@ def webhook():
 def processar_pagamento(payment_id):
     print("Processando pagamento:", payment_id)
     payment_info = sdk.payment().get(payment_id)
-    response = payment_info.get("response", {})
 
-    status = response.get("status")
-    preference_id = response.get("preference_id")
-    metadata = response.get("metadata", {})
-    telegram_id = None
+    status = payment_info["response"]["status"]
+    preference_id = payment_info["response"]["preference_id"]
+    telegram_id = carregar_temp_pagamento(preference_id)
 
-    if preference_id:
-        telegram_id = carregar_temp_pagamento(preference_id)
-    if not telegram_id and "telegram_id" in metadata:
-        telegram_id = metadata["telegram_id"]
-
-    print("Status:", status, "| Preference ID:", preference_id, "| Telegram ID:", telegram_id)
+    print("Status:", status, " | Preference ID:", preference_id, " | Telegram ID:", telegram_id)
 
     if status == "approved" and telegram_id:
         dados = carregar_dados()
@@ -231,6 +216,5 @@ verificacao_thread.start()
 
 # === Executar Localmente (Render usa Gunicorn) ===
 
-if __name__ == '__main__':
+if name == 'main':
     print("Rodando localmente. Em produção, use gunicorn.")
-    app.run(debug=True)
