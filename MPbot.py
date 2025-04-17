@@ -13,7 +13,7 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
 BOT = telegram.Bot(token=TELEGRAM_TOKEN)
-GROUP_ID = -abs(int(os.getenv("TELEGRAM_GROUP_ID")))
+GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
 GRUPO_LINK = os.getenv("GRUPO_LINK")
 
 DB_FILE = "assinantes.json"
@@ -89,7 +89,7 @@ def webhook():
 
     elif update.callback_query:
         query = update.callback_query
-        query.answer()  # responde imediatamente para evitar timeout
+        query.answer()
 
         user_id = query.from_user.id
         chat_id = query.message.chat.id
