@@ -1,98 +1,221 @@
 import os
-import time
-import threading
-from flask import Flask, request
-import requests
+import json
 from datetime import datetime, timedelta
+from flask import Flask, request
+import telegram
+import mercadopago
+from dotenv import load_dotenv
+from threading import Thread
+import time
 
-app = Flask(__name__)
+load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_GROUP_ID = os.getenv("TELEGRAM_GROUP_ID")
-MP_ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+BOT = telegram.Bot(token=TELEGRAM_TOKEN)
+GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
+GRUPO_LINK = os.getenv("GRUPO_LINK")
 
-assinaturas = {}
+DB_FILE = "assinantes.json"
+TEMP_PREFS = "pagamentos_temp.json"
 
-@app.route('/')
-def home():
-    return 'Bot de Pagamento está ativo!'
+app = Flask(__name__)
+sdk = mercadopago.SDK(ACCESS_TOKEN)
 
-@app.route('/start', methods=['POST'])
-def start():
-    data = request.json
-    telegram_id = data["message"]["from"]["id"]
-    link_pagamento = gerar_link_pagamento(telegram_id)
-    enviar_mensagem(telegram_id, f"Para acessar o grupo, realize o pagamento: {link_pagamento}")
-    return "OK", 200
+ASSINATURA_VALOR = 10.00
+DIAS_ASSINATURA = 1
 
-def gerar_link_pagamento(telegram_id):
-    url = "https://api.mercadopago.com/checkout/preferences"
-    headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
-    payload = {
-        "items": [{"title": "Assinatura Grupo", "quantity": 1, "currency_id": "BRL", "unit_price": 1.00}],
-        "notification_url": os.getenv("WEBHOOK_URL"),
-        "metadata": {"telegram_id": telegram_id}
-    }
-    response = requests.post(url, json=payload, headers=headers)
-    return response.json()["init_point"]
+# === Utilitários de Banco de Dados ===
 
-@app.route('/notificacao', methods=['POST'])
+def carregar_dados():
+    if not os.path.exists(DB_FILE):
+        return {}
+    with open(DB_FILE, 'r') as f:
+        return json.load(f)
+
+def salvar_dados(dados):
+    with open(DB_FILE, 'w') as f:
+        json.dump(dados, f, indent=4)
+
+def salvar_temp_pagamento(preference_id, telegram_id):
+    if os.path.exists(TEMP_PREFS):
+        with open(TEMP_PREFS, 'r') as f:
+            dados = json.load(f)
+    else:
+        dados = {}
+    dados[preference_id] = telegram_id
+    with open(TEMP_PREFS, 'w') as f:
+        json.dump(dados, f)
+
+def carregar_temp_pagamento(preference_id):
+    if not os.path.exists(TEMP_PREFS):
+        return None
+    with open(TEMP_PREFS, 'r') as f:
+        dados = json.load(f)
+    return dados.get(preference_id)
+
+# === Rota Principal (Telegram Bot) ===
+
+@app.route("/", methods=["GET", "POST", "HEAD"])
+def webhook():
+    if request.method in ["GET", "HEAD"]:
+        return "Bot de pagamento está ativo."
+
+    update = telegram.Update.de_json(request.get_json(force=True), BOT)
+
+    if update.message:
+        chat_id = update.message.chat.id
+        user_id = update.message.from_user.id
+        texto = update.message.text
+
+        if texto == "/start":
+            BOT.send_message(
+                chat_id=chat_id,
+                text="Bem-vindo ao Bot de Apostas! Clique no botão abaixo para pagar sua assinatura.",
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [telegram.InlineKeyboardButton("💰 Pagar", callback_data="pagar")]
+                ])
+            )
+
+        elif texto == "/status":
+            dados = carregar_dados()
+            info = dados.get(str(user_id))
+            if info:
+                venc = datetime.strptime(info["vencimento"], "%Y-%m-%d")
+                dias = (venc - datetime.now()).days
+                BOT.send_message(chat_id=chat_id, text=f"✅ Sua assinatura está ativa. Vence em {dias} dia(s), em {info['vencimento']}.")
+            else:
+                BOT.send_message(chat_id=chat_id, text="❌ Você não possui uma assinatura ativa.")
+
+    elif update.callback_query:
+        query = update.callback_query
+        user_id = query.from_user.id
+        chat_id = query.message.chat.id
+
+        if query.data == "pagar":
+            url_base = os.getenv("WEBHOOK_URL")
+            if not url_base.endswith("/notificacao"):
+                url_base += "/notificacao"
+
+            preference_data = {
+                "items": [
+                    {
+                        "title": "Assinatura mensal do grupo",
+                        "quantity": 1,
+                        "currency_id": "BRL",
+                        "unit_price": ASSINATURA_VALOR
+                    }
+                ],
+                "back_urls": {
+                    "success": "https://t.me/seu_bot",
+                    "failure": "https://t.me/seu_bot",
+                    "pending": "https://t.me/seu_bot"
+                },
+                "auto_return": "approved",
+                "notification_url": url_base
+            }
+
+            preference = sdk.preference().create(preference_data)
+            checkout_url = preference["response"]["init_point"]
+            preference_id = preference["response"]["id"]
+
+            salvar_temp_pagamento(preference_id, user_id)
+
+            BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
+            BOT.send_message(chat_id=chat_id, text=checkout_url)
+            BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
+
+    return "ok"
+
+# === Processamento de Pagamento ===
+
+def processar_pagamento(payment_id):
+    print("Processando pagamento:", payment_id)
+    payment_info = sdk.payment().get(payment_id)
+
+    status = payment_info["response"]["status"]
+    preference_id = payment_info["response"]["preference_id"]
+    telegram_id = carregar_temp_pagamento(preference_id)
+
+    print("Status:", status, " | Preference ID:", preference_id, " | Telegram ID:", telegram_id)
+
+    if status == "approved" and telegram_id:
+        dados = carregar_dados()
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        vencimento = (datetime.now() + timedelta(days=DIAS_ASSINATURA)).strftime("%Y-%m-%d")
+
+        dados[str(telegram_id)] = {
+            "pagamento": hoje,
+            "vencimento": vencimento,
+            "status": "ativo"
+        }
+        salvar_dados(dados)
+
+        BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
+        BOT.send_message(chat_id=telegram_id, text=f"☛ Acesse o grupo: {GRUPO_LINK}")
+
+# === Rota de Notificação Mercado Pago ===
+
+@app.route("/notificacao", methods=["POST"])
 def notificacao():
     data = request.json
+    print("Notificação recebida:", data)
+
+    if not data:
+        return "ignorado"
+
     if data.get("type") == "payment":
-        payment_id = data["data"]["id"]
-        verificar_pagamento(payment_id)
-    return "OK", 200
+        payment_id = data.get("data", {}).get("id")
+        processar_pagamento(payment_id)
 
-def verificar_pagamento(payment_id):
-    url = f"https://api.mercadopago.com/v1/payments/{payment_id}"
-    headers = {"Authorization": f"Bearer {MP_ACCESS_TOKEN}"}
-    response = requests.get(url, headers=headers)
-    pagamento = response.json()
+    elif data.get("type") == "merchant_order":
+        order_id = data.get("data", {}).get("id")
+        print("Notificação de merchant_order:", order_id)
 
-    if pagamento["status"] == "approved":
-        telegram_id = str(pagamento["metadata"]["telegram_id"])
-        adicionar_ao_grupo(telegram_id)
-        enviar_mensagem(telegram_id, "Pagamento confirmado! Você foi adicionado ao grupo.")
-        expiracao = datetime.now() + timedelta(days=1)  # ✅ 1 dia de acesso para testes
-        assinaturas[telegram_id] = expiracao
+        order_info = sdk.merchant_order().get(order_id)
+        payments = order_info["response"].get("payments", [])
 
-def adicionar_ao_grupo(telegram_id):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/unbanChatMember"
-    payload = {"chat_id": TELEGRAM_GROUP_ID, "user_id": telegram_id}
-    requests.post(url, json=payload)
+        for payment in payments:
+            if payment["status"] == "approved":
+                payment_id = payment["id"]
+                processar_pagamento(payment_id)
 
-def enviar_mensagem(chat_id, texto):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": chat_id, "text": texto}
-    requests.post(url, json=payload)
+    return "ok"
 
-def verificar_assinaturas():
+# === Verificação Diária de Vencimentos ===
+
+def verificar_vencimentos():
     while True:
-        agora = datetime.now()
-        expirados = []
-        for telegram_id, validade in list(assinaturas.items()):
-            restante = validade - agora
+        time.sleep(30)
+        dados = carregar_dados()
+        hoje = datetime.now().strftime("%Y-%m-%d")
 
-            if restante.total_seconds() < 3600 and restante.total_seconds() > 0:  # ✅ Avisa com 1 hora restante
-                enviar_mensagem(telegram_id, "Sua assinatura vai expirar em 1 hora! Faça um novo pagamento para continuar.")
-            elif restante.total_seconds() <= 0:
-                enviar_mensagem(telegram_id, "Sua assinatura expirou. Você será removido do grupo.")
-                remover_do_grupo(telegram_id)
-                expirados.append(telegram_id)
+        for uid, info in list(dados.items()):
+            if info["status"] == "ativo":
+                dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
+                if dias_restantes == 1:
+                    try:
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence amanhã. Renove para continuar no grupo sem interrupções.")
+                    except Exception as e:
+                        print(f"Erro ao avisar {uid}: {e}")
+                if info["vencimento"] < hoje:
+                    try:
+                        BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
+                        BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
+                        BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
+                    except Exception as e:
+                        print(f"Erro ao remover {uid}: {e}")
+                    dados[uid]["status"] = "inativo"
 
-        for telegram_id in expirados:
-            del assinaturas[telegram_id]
+        salvar_dados(dados)
 
-        time.sleep(60)  # Verifica a cada 1 minuto
+# === Iniciar Verificação em Thread ===
 
-def remover_do_grupo(telegram_id):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/kickChatMember"
-    payload = {"chat_id": TELEGRAM_GROUP_ID, "user_id": telegram_id}
-    requests.post(url, json=payload)
+verificacao_thread = Thread(target=verificar_vencimentos)
+verificacao_thread.daemon = True
+verificacao_thread.start()
 
-# Iniciar verificação em paralelo
-threading.Thread(target=verificar_assinaturas, daemon=True).start()
+# === Executar Localmente (Render usa Gunicorn) ===
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    print("Rodando localmente. Em produção, use gunicorn.")
