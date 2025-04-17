@@ -19,7 +19,7 @@ GRUPO_LINK = os.getenv("GRUPO_LINK")
 DB_FILE = "assinantes.json"
 TEMP_PREFS = "pagamentos_temp.json"
 
-app = Flask(name)
+app = Flask(__name__)
 sdk = mercadopago.SDK(ACCESS_TOKEN)
 
 ASSINATURA_VALOR = 10.00
@@ -120,7 +120,7 @@ def webhook():
             preference_id = preference["response"]["id"]
 
             salvar_temp_pagamento(preference_id, user_id)
-BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
+            BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
             BOT.send_message(chat_id=chat_id, text=checkout_url)
             BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
 
@@ -214,7 +214,8 @@ verificacao_thread = Thread(target=verificar_vencimentos)
 verificacao_thread.daemon = True
 verificacao_thread.start()
 
-# === Executar Localmente (Render usa Gunicorn) ===
+# === Executar Localmente ===
 
-if name == 'main':
+if __name__ == '__main__':
     print("Rodando localmente. Em produção, use gunicorn.")
+    app.run(host='0.0.0.0', port=5000)
