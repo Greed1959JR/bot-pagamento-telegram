@@ -41,36 +41,53 @@ def webhook():
         return "Bot de pagamento está ativo."
 
     update = telegram.Update.de_json(request.get_json(force=True), BOT)
-    chat_id = update.message.chat.id
-    user_id = update.message.from_user.id
 
-    if update.message.text == "/start":
-        BOT.send_message(
-            chat_id=chat_id,
-            text="Bem-vindo ao Bot de Apostas! Clique no botão abaixo para pagar sua assinatura.",
-            reply_markup=telegram.ReplyKeyboardMarkup(
-                [[telegram.KeyboardButton("\uD83D\uDCB0 Pagar")]],
-                resize_keyboard=True
+    if update.message:
+        chat_id = update.message.chat.id
+        user_id = update.message.from_user.id
+
+        if update.message.text == "/start":
+            BOT.send_message(
+                chat_id=chat_id,
+                text="Bem-vindo ao Bot de Apostas! Clique no botão abaixo para pagar sua assinatura.",
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [telegram.InlineKeyboardButton("\uD83D\uDCB0 Pagar", callback_data="pagar")]
+                ])
             )
-        )
 
-    elif update.message.text == "\uD83D\uDCB0 Pagar":
-        payment_data = {
-            "transaction_amount": ASSINATURA_VALOR,
-            "description": "Assinatura mensal do grupo",
-            "payment_method_id": "pix",
-            "payer": {
-                "email": f"{user_id}@fakeemail.com"
-            },
-            "notification_url": os.getenv("WEBHOOK_URL")
-        }
+    elif update.callback_query:
+        query = update.callback_query
+        user_id = query.from_user.id
+        chat_id = query.message.chat.id
 
-        payment = sdk.payment().create(payment_data)
-        pix_data = payment["response"]
+        if query.data == "pagar":
+            preference_data = {
+                "items": [
+                    {
+                        "title": "Assinatura mensal do grupo",
+                        "quantity": 1,
+                        "currency_id": "BRL",
+                        "unit_price": ASSINATURA_VALOR
+                    }
+                ],
+                "payer": {
+                    "email": f"{user_id}@fakeemail.com"
+                },
+                "notification_url": os.getenv("WEBHOOK_URL"),
+                "back_urls": {
+                    "success": "https://t.me/seu_bot",
+                    "failure": "https://t.me/seu_bot",
+                    "pending": "https://t.me/seu_bot"
+                },
+                "auto_return": "approved"
+            }
 
-        BOT.send_message(chat_id=chat_id, text=f"\uD83D\uDD17 Link para pagar via Mercado Pago:")
-        BOT.send_message(chat_id=chat_id, text=pix_data['point_of_interaction']['transaction_data']['ticket_url'])
-        BOT.send_message(chat_id=chat_id, text="\uD83D\uDCA1 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
+            preference = sdk.preference().create(preference_data)
+            checkout_url = preference["response"]["init_point"]
+
+            BOT.send_message(chat_id=chat_id, text="\uD83D\uDCB3 Clique no link abaixo para pagar com Mercado Pago:")
+            BOT.send_message(chat_id=chat_id, text=checkout_url)
+            BOT.send_message(chat_id=chat_id, text="\uD83D\uDCA1 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
 
     return "ok"
 
@@ -99,7 +116,7 @@ def notificacao():
             }
             salvar_dados(dados)
 
-            BOT.send_message(chat_id=telegram_id, text="\u2705 Pagamento aprovado! Você foi liberado no grupo.")
+            BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
 
     return "ok"
 
@@ -112,14 +129,23 @@ def verificar_vencimentos():
         hoje = datetime.now().strftime("%Y-%m-%d")
 
         for uid, info in list(dados.items()):
-            if info["status"] == "ativo" and info["vencimento"] < hoje:
-                try:
-                    BOT.send_message(chat_id=int(uid), text="\u26A0\uFE0F Sua assinatura expirou. Você será removido do grupo.")
-                    BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
-                    BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid))  # Permite voltar depois
-                except Exception as e:
-                    print(f"Erro ao remover {uid}: {e}")
-                dados[uid]["status"] = "inativo"
+            if info["status"] == "ativo":
+                # Avisar com 3 dias de antecedência
+                dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
+                if dias_restantes == 3:
+                    try:
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence em 3 dias. Renove para continuar no grupo sem interrupções.")
+                    except Exception as e:
+                        print(f"Erro ao avisar {uid}: {e}")
+                # Remoção se vencido
+                if info["vencimento"] < hoje:
+                    try:
+                        BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
+                        BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
+                        BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid))  # Permite voltar depois
+                    except Exception as e:
+                        print(f"Erro ao remover {uid}: {e}")
+                    dados[uid]["status"] = "inativo"
 
         salvar_dados(dados)
 
