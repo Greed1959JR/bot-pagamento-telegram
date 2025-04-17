@@ -19,11 +19,11 @@ DB_FILE = "assinantes.json"
 TEMP_PREFS = "pagamentos_temp.json"
 
 app = Flask(__name__)
-
 sdk = mercadopago.SDK(ACCESS_TOKEN)
+
 ASSINATURA_VALOR = 10.00
 
-# Utilitários para banco de dados
+# === Utilitários de Banco de Dados ===
 
 def carregar_dados():
     if not os.path.exists(DB_FILE):
@@ -52,10 +52,11 @@ def carregar_temp_pagamento(preference_id):
         dados = json.load(f)
     return dados.get(preference_id)
 
-# Menu do bot
+# === Rota Principal (Telegram Bot) ===
+
 @app.route("/", methods=["GET", "POST", "HEAD"])
 def webhook():
-    if request.method == "GET" or request.method == "HEAD":
+    if request.method in ["GET", "HEAD"]:
         return "Bot de pagamento está ativo."
 
     update = telegram.Update.de_json(request.get_json(force=True), BOT)
@@ -109,36 +110,61 @@ def webhook():
 
     return "ok"
 
-# Notificação de pagamento
+# === Processamento de Pagamento ===
+
+def processar_pagamento(payment_id):
+    print("🔄 Processando pagamento:", payment_id)
+    payment_info = sdk.payment().get(payment_id)
+
+    status = payment_info["response"]["status"]
+    preference_id = payment_info["response"].get("order", {}).get("id") or payment_info["response"].get("preference_id")
+    telegram_id = carregar_temp_pagamento(preference_id)
+
+    print("📦 Status:", status, " | Preference ID:", preference_id, " | Telegram ID:", telegram_id)
+
+    if status == "approved" and telegram_id:
+        dados = carregar_dados()
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        vencimento = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        dados[str(telegram_id)] = {
+            "pagamento": hoje,
+            "vencimento": vencimento,
+            "status": "ativo"
+        }
+        salvar_dados(dados)
+
+        BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
+
+# === Rota de Notificação Mercado Pago ===
+
 @app.route("/notificacao", methods=["POST"])
 def notificacao():
     data = request.json
+    print("🔔 Notificação recebida:", data)
 
-    if data and data.get("type") == "payment":
+    if not data:
+        return "ignorado"
+
+    if data.get("type") == "payment":
         payment_id = data.get("data", {}).get("id")
-        payment_info = sdk.payment().get(payment_id)
+        processar_pagamento(payment_id)
 
-        status = payment_info["response"]["status"]
-        preference_id = payment_info["response"].get("order", {}).get("id") or payment_info["response"].get("preference_id")
-        telegram_id = carregar_temp_pagamento(preference_id)
+    elif data.get("type") == "merchant_order":
+        order_id = data.get("data", {}).get("id")
+        print("📦 Notificação de merchant_order:", order_id)
 
-        if status == "approved" and telegram_id:
-            dados = carregar_dados()
-            hoje = datetime.now().strftime("%Y-%m-%d")
-            vencimento = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        order_info = sdk.merchant_order().get(order_id)
+        payments = order_info["response"].get("payments", [])
 
-            dados[str(telegram_id)] = {
-                "pagamento": hoje,
-                "vencimento": vencimento,
-                "status": "ativo"
-            }
-            salvar_dados(dados)
-
-            BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
+        for payment in payments:
+            if payment["status"] == "approved":
+                payment_id = payment["id"]
+                processar_pagamento(payment_id)
 
     return "ok"
 
-# Verificador diário de vencimentos
+# === Verificação Diária de Vencimentos ===
 
 def verificar_vencimentos():
     while True:
@@ -165,10 +191,13 @@ def verificar_vencimentos():
 
         salvar_dados(dados)
 
-# Início da thread de verificação
+# === Iniciar Verificação em Thread ===
+
 verificacao_thread = Thread(target=verificar_vencimentos)
 verificacao_thread.daemon = True
 verificacao_thread.start()
+
+# === Executar Localmente (Render usa Gunicorn) ===
 
 if __name__ == '__main__':
     print("Rodando localmente. Em produção, use gunicorn.")
