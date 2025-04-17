@@ -94,7 +94,7 @@ def webhook():
                     "pending": "https://t.me/seu_bot"
                 },
                 "auto_return": "approved",
-                "notification_url": os.getenv("WEBHOOK_URL")
+                "notification_url": os.getenv("WEBHOOK_URL") + "/notificacao"
             }
 
             preference = sdk.preference().create(preference_data)
