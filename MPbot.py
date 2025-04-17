@@ -133,7 +133,7 @@ def processar_pagamento(payment_id):
     payment_info = sdk.payment().get(payment_id)
 
     status = payment_info["response"]["status"]
-    preference_id = payment_info["response"].get("order", {}).get("id") or payment_info["response"].get("preference_id")
+    preference_id = payment_info["response"]["preference_id"]
     telegram_id = carregar_temp_pagamento(preference_id)
 
     print("Status:", status, " | Preference ID:", preference_id, " | Telegram ID:", telegram_id)
