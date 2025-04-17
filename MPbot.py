@@ -89,11 +89,14 @@ def webhook():
 
     elif update.callback_query:
         query = update.callback_query
-        query.answer()
+        query.answer()  # responde imediatamente para evitar timeout
+
         user_id = query.from_user.id
         chat_id = query.message.chat.id
 
         if query.data == "pagar":
+            BOT.send_message(chat_id=chat_id, text="🔄 Gerando link de pagamento...")
+
             url_base = os.getenv("WEBHOOK_URL")
             if not url_base.endswith("/notificacao"):
                 url_base += "/notificacao"
