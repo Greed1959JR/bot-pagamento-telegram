@@ -23,6 +23,7 @@ app = Flask(__name__)
 sdk = mercadopago.SDK(ACCESS_TOKEN)
 
 ASSINATURA_VALOR = 10.00
+DIAS_ASSINATURA = 1
 
 # === Utilitários de Banco de Dados ===
 
@@ -141,7 +142,7 @@ def processar_pagamento(payment_id):
     if status == "approved" and telegram_id:
         dados = carregar_dados()
         hoje = datetime.now().strftime("%Y-%m-%d")
-        vencimento = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        vencimento = (datetime.now() + timedelta(days=DIAS_ASSINATURA)).strftime("%Y-%m-%d")
 
         dados[str(telegram_id)] = {
             "pagamento": hoje,
@@ -185,16 +186,16 @@ def notificacao():
 
 def verificar_vencimentos():
     while True:
-        time.sleep(86400)
+        time.sleep(30)
         dados = carregar_dados()
         hoje = datetime.now().strftime("%Y-%m-%d")
 
         for uid, info in list(dados.items()):
             if info["status"] == "ativo":
                 dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
-                if dias_restantes == 3:
+                if dias_restantes == 1:
                     try:
-                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence em 3 dias. Renove para continuar no grupo sem interrupções.")
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence amanhã. Renove para continuar no grupo sem interrupções.")
                     except Exception as e:
                         print(f"Erro ao avisar {uid}: {e}")
                 if info["vencimento"] < hoje:
@@ -218,3 +219,4 @@ verificacao_thread.start()
 
 if __name__ == '__main__':
     print("Rodando localmente. Em produção, use gunicorn.")
+    
