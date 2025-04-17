@@ -35,9 +35,9 @@ def salvar_dados(dados):
         json.dump(dados, f, indent=4)
 
 # Menu do bot
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET", "POST", "HEAD"])
 def webhook():
-    if request.method == "GET":
+    if request.method == "GET" or request.method == "HEAD":
         return "Bot de pagamento está ativo."
 
     update = telegram.Update.de_json(request.get_json(force=True), BOT)
