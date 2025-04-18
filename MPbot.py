@@ -24,7 +24,9 @@ sdk = mercadopago.SDK(ACCESS_TOKEN)
 lock = Lock()
 
 PLANOS = {
-    "mensal": {"valor": 19.90, "dias": 30},
+    "mensal": {"valor": 5.00, "dias": 1},  # valor reduzido e vencimento de teste até amanhã
+    "trimestral": {"valor": 52.90, "dias": 90}
+},
     "trimestral": {"valor": 52.90, "dias": 90}
 }
 
@@ -111,7 +113,7 @@ def painel():
 
         nome = info.get("nome", "Desconhecido")
         pagamento_fmt = datetime.strptime(info["pagamento"], "%Y-%m-%d").strftime("%d/%m/%Y")
-        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d").strftime("%d/%m/%Y")
+        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
         html += f"<li><b>{nome}</b> (ID: {uid}) — Pagamento: {pagamento_fmt} | Vencimento: {vencimento_fmt} | Status: {info['status']} <button name='remover' value='{uid}'>Remover</button><input type='hidden' name='confirmar_remover' value='{uid}'></li>"
 
     html += """
@@ -261,8 +263,6 @@ def webhook():
 
 # === Processamento de Pagamento ===
 
-
-
 def processar_pagamento(payment_id):
     payment_info = sdk.payment().get(payment_id)
     response = payment_info.get("response", {})
@@ -299,7 +299,7 @@ def processar_pagamento(payment_id):
 
         dados = carregar_dados()
         hoje = datetime.now().strftime("%Y-%m-%d")
-        vencimento = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
+        vencimento = (datetime.now() + timedelta(hours=14)).strftime("%Y-%m-%d %H:%M:%S") if plano == "mensal" else (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
 
         dados[str(telegram_id)] = {
             "pagamento": hoje,
@@ -345,10 +345,10 @@ def verificar_vencimentos():
 
         for uid, info in list(dados.items()):
             if info["status"] == "ativo":
-                dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
-                if dias_restantes == 1:
+                horas_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S") - datetime.now()).total_seconds() / 3600
+                if 0.9 <= horas_restantes <= 1.1:
                     try:
-                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence amanhã. Renove para continuar no grupo sem interrupções.")
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura expira em 1 hora. Renove para continuar no grupo sem interrupções.")
                     except Exception as e:
                         print(f"Erro ao avisar {uid}: {e}")
                 if info["vencimento"] < hoje:
