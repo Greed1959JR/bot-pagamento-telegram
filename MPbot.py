@@ -37,7 +37,7 @@ def carregar_dados():
     with lock:
         if not os.path.exists(DB_FILE):
             return {}
-        with open(DB_FILE, 'r') as f:
+        with open(DB_FILE, ' 'r') as f:
             return json.load(f)
 
 def salvar_dados(dados):
@@ -258,7 +258,6 @@ def webhook():
             )
 
     return "ok"
-
 # === Processamento de Pagamento ===
 
 
@@ -311,7 +310,7 @@ def processar_pagamento(payment_id):
         BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
         BOT.send_message(chat_id=telegram_id, text=f"☚ Acesse o grupo: {GRUPO_LINK}")
 
-# === Rota de Notificação Mercado Pago ===
+# === Notificação do Mercado Pago ===
 
 @app.route("/notificacao", methods=["POST"])
 def notificacao():
