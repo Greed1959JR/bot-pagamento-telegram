@@ -24,9 +24,7 @@ sdk = mercadopago.SDK(ACCESS_TOKEN)
 lock = Lock()
 
 PLANOS = {
-    "mensal": {"valor": 5.00, "dias": 1},  # valor reduzido e vencimento de teste até amanhã
-    "trimestral": {"valor": 52.90, "dias": 90}
-},
+    "mensal": {"valor": 5.00, "dias": 0.583},  # 14 horas = 0.583 dias
     "trimestral": {"valor": 52.90, "dias": 90}
 }
 
