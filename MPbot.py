@@ -108,5 +108,171 @@ def painel():
     """
     return html
 
-# === Resto do código permanece igual ===
-# (webhook, pagamento, notificacao, verificação, etc...)
+# === Webhook Telegram ===
+
+@app.route("/", methods=["GET", "POST", "HEAD"])
+def webhook():
+    if request.method in ["GET", "HEAD"]:
+        return "Bot de pagamento está ativo."
+
+    update = telegram.Update.de_json(request.get_json(force=True), BOT)
+
+    if update.message:
+        chat_id = update.message.chat.id
+        user_id = update.message.from_user.id
+        texto = update.message.text
+
+        if texto == "/start":
+            BOT.send_message(
+                chat_id=chat_id,
+                text="Bem-vindo ao Bot de Apostas! Clique no botão abaixo para pagar sua assinatura.",
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [telegram.InlineKeyboardButton("💰 Pagar", callback_data="pagar")]
+                ])
+            )
+
+        elif texto == "/status":
+            dados = carregar_dados()
+            info = dados.get(str(user_id))
+            if info:
+                venc = datetime.strptime(info["vencimento"], "%Y-%m-%d")
+                dias = (venc - datetime.now()).days
+                BOT.send_message(chat_id=chat_id, text=f"✅ Sua assinatura está ativa. Vence em {dias} dia(s), em {info['vencimento']}.")
+            else:
+                BOT.send_message(chat_id=chat_id, text="❌ Você não possui uma assinatura ativa.")
+
+    elif update.callback_query:
+        query = update.callback_query
+        user_id = query.from_user.id
+        chat_id = query.message.chat.id
+
+        if query.data == "pagar":
+            url_base = os.getenv("WEBHOOK_URL")
+            if not url_base.endswith("/notificacao"):
+                url_base += "/notificacao"
+
+            preference_data = {
+                "items": [
+                    {
+                        "title": "Assinatura mensal do grupo",
+                        "quantity": 1,
+                        "currency_id": "BRL",
+                        "unit_price": ASSINATURA_VALOR
+                    }
+                ],
+                "back_urls": {
+                    "success": "https://t.me/seu_bot",
+                    "failure": "https://t.me/seu_bot",
+                    "pending": "https://t.me/seu_bot"
+                },
+                "auto_return": "approved",
+                "notification_url": url_base
+            }
+
+            preference = sdk.preference().create(preference_data)
+            checkout_url = preference["response"]["init_point"]
+            preference_id = preference["response"]["id"]
+
+            salvar_temp_pagamento(preference_id, user_id)
+            BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
+            BOT.send_message(chat_id=chat_id, text=checkout_url)
+            BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
+
+    return "ok"
+
+# === Processamento de Pagamento ===
+
+def processar_pagamento(payment_id):
+    payment_info = sdk.payment().get(payment_id)
+    response = payment_info.get("response", {})
+    status = response.get("status")
+    preference_id = response.get("preference_id")
+
+    if not preference_id:
+        order_id = response.get("order", {}).get("id")
+        if order_id:
+            try:
+                order_info = sdk.merchant_order().get(order_id)
+                preference_id = order_info["response"].get("preference_id")
+            except Exception as e:
+                print(f"Erro ao buscar merchant_order: {e}")
+
+    if not preference_id:
+        print("❌ Erro: 'preference_id' não encontrado na resposta do pagamento.")
+        return
+
+    telegram_id = carregar_temp_pagamento(preference_id)
+
+    if status == "approved" and telegram_id:
+        dados = carregar_dados()
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        vencimento = (datetime.now() + timedelta(days=DIAS_ASSINATURA)).strftime("%Y-%m-%d")
+
+        dados[str(telegram_id)] = {
+            "pagamento": hoje,
+            "vencimento": vencimento,
+            "status": "ativo"
+        }
+        salvar_dados(dados)
+
+        BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
+        BOT.send_message(chat_id=telegram_id, text=f"☚ Acesse o grupo: {GRUPO_LINK}")
+
+# === Rota de Notificação Mercado Pago ===
+
+@app.route("/notificacao", methods=["POST"])
+def notificacao():
+    data = request.json
+    if not data:
+        return "ignorado"
+
+    if data.get("type") == "payment":
+        payment_id = data.get("data", {}).get("id")
+        processar_pagamento(payment_id)
+
+    elif data.get("type") == "merchant_order":
+        order_id = data.get("data", {}).get("id")
+        order_info = sdk.merchant_order().get(order_id)
+        payments = order_info["response"].get("payments", [])
+
+        for payment in payments:
+            if payment["status"] == "approved":
+                payment_id = payment["id"]
+                processar_pagamento(payment_id)
+
+    return "ok"
+
+# === Verificação Diária de Vencimentos ===
+
+def verificar_vencimentos():
+    while True:
+        time.sleep(30)
+        dados = carregar_dados()
+        hoje = datetime.now().strftime("%Y-%m-%d")
+
+        for uid, info in list(dados.items()):
+            if info["status"] == "ativo":
+                dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
+                if dias_restantes == 1:
+                    try:
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence amanhã. Renove para continuar no grupo sem interrupções.")
+                    except Exception as e:
+                        print(f"Erro ao avisar {uid}: {e}")
+                if info["vencimento"] < hoje:
+                    try:
+                        BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
+                        BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
+                        BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
+                    except Exception as e:
+                        print(f"Erro ao remover {uid}: {e}")
+                    dados[uid]["status"] = "inativo"
+
+        salvar_dados(dados)
+
+verificacao_thread = Thread(target=verificar_vencimentos)
+verificacao_thread.daemon = True
+verificacao_thread.start()
+
+if __name__ == '__main__':
+    print("Rodando localmente. Em produção, use gunicorn.")
+    app.run(host='0.0.0.0', port=5000)
