@@ -71,6 +71,10 @@ import os
 USUARIO_ADMIN = os.getenv("USUARIO_ADMIN")
 SENHA_ADMIN = os.getenv("SENHA_ADMIN")
 
+@app.route("/logout")
+def logout():
+    return Response("Logout realizado.", 401, {"WWW-Authenticate": "Basic realm='Login Requerido'"})
+
 @app.route("/painel", methods=["GET", "POST"])
 def painel():
     auth = request.authorization
@@ -79,8 +83,9 @@ def painel():
 
     dados = carregar_dados()
 
-    # Remover usuário manualmente
+    # Processar ações do formulário
     if request.method == "POST":
+        # Remover usuário
         uid_remover = request.form.get("remover")
         confirmar = request.form.get("confirmar_remover")
 
@@ -113,6 +118,20 @@ def painel():
             salvar_dados(dados)
             return redirect(url_for('painel'))
 
+        # Gerar link de convite
+        gerar_link_id = request.form.get("gerar_link")
+        if gerar_link_id:
+            try:
+                link_convite = BOT.create_chat_invite_link(
+                    chat_id=GROUP_ID,
+                    expire_date=int((datetime.now() + timedelta(minutes=10)).timestamp()),
+                    member_limit=1
+                ).invite_link
+                BOT.send_message(chat_id=int(gerar_link_id), text=f"🔗 Acesse o grupo com este link (válido por 10 min, 1 uso):\n{link_convite}")
+            except Exception as e:
+                print(f"Erro ao gerar link para {gerar_link_id}: {e}")
+            return redirect(url_for('painel'))
+
     filtro = request.args.get("filtro", "ativos")
     html = f"""
         <html>
@@ -123,10 +142,12 @@ def painel():
                 h2 {{ color: #2c3e50; }}
                 .ativo {{ color: green; }}
                 .inativo {{ color: red; }}
-                select, input[type=text], input[type=submit] {{ padding: 8px; margin: 5px 0; border-radius: 6px; border: 1px solid #ccc; width: 100%; }}
+                select, input[type=text], input[type=submit], button {{ padding: 8px; margin: 5px 0; border-radius: 6px; border: 1px solid #ccc; width: 100%; }}
                 .container {{ background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); max-width: 800px; margin: auto; }}
                 .user-card {{ margin: 15px 0; padding: 15px; border-left: 5px solid #3498db; background: #fdfdfd; border-radius: 6px; }}
                 .btn-remove {{ background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }}
+                .btn-link {{ background: #2ecc71; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }}
+                .btn-logout {{ background: #95a5a6; color: white; border: none; padding: 6px 12px; border-radius: 4px; margin-top: 15px; cursor: pointer; width: auto; }}
                 .add-form {{ background: #f8f8f8; padding: 20px; border: 1px solid #ddd; border-radius: 10px; margin-top: 20px; }}
                 label {{ display: block; margin-top: 10px; }}
             </style>
@@ -140,6 +161,9 @@ def painel():
                     <option value='inativos' {'selected' if filtro == 'inativos' else ''}>Inativos</option>
                     <option value='todos' {'selected' if filtro == 'todos' else ''}>Todos</option>
                 </select>
+            </form>
+            <form action='/logout' method='get'>
+                <button class='btn-logout'>🔐 Sair</button>
             </form>
 
             <div class='add-form'>
@@ -188,6 +212,7 @@ def painel():
                 <b>Tempo restante:</b> {tempo_fmt}<br>
                 <button class='btn-remove' name='remover' value='{uid}'>Remover</button>
                 <input type='hidden' name='confirmar_remover' value='{uid}'>
+                <button class='btn-link' name='gerar_link' value='{uid}'>Gerar Link de Acesso</button>
             </div>
         """
 
@@ -198,6 +223,7 @@ def painel():
         </html>
     """
     return html
+
 
 # === Webhook Telegram ===
 
