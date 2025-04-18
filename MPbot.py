@@ -22,7 +22,7 @@ TEMP_PREFS = "pagamentos_temp.json"
 app = Flask(__name__)
 sdk = mercadopago.SDK(ACCESS_TOKEN)
 
-ASSINATURA_VALOR = 5.00
+ASSINATURA_VALOR = 10.00
 DIAS_ASSINATURA = 1
 
 # === Utilitários de Banco de Dados ===
@@ -131,13 +131,23 @@ def webhook():
 def processar_pagamento(payment_id):
     print("Processando pagamento:", payment_id)
     payment_info = sdk.payment().get(payment_id)
-
     response = payment_info.get("response", {})
+
     print("=== DEBUG DO PAYMENT_INFO ===")
     print(json.dumps(response, indent=4))
 
     status = response.get("status")
     preference_id = response.get("preference_id")
+
+    if not preference_id:
+        # Tenta obter o preference_id via merchant_order
+        order_id = response.get("order", {}).get("id")
+        if order_id:
+            try:
+                order_info = sdk.merchant_order().get(order_id)
+                preference_id = order_info["response"].get("preference_id")
+            except Exception as e:
+                print(f"Erro ao buscar merchant_order: {e}")
 
     if not preference_id:
         print("❌ Erro: 'preference_id' não encontrado na resposta do pagamento.")
@@ -159,7 +169,7 @@ def processar_pagamento(payment_id):
         salvar_dados(dados)
 
         BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
-        BOT.send_message(chat_id=telegram_id, text=f"☛ Acesse o grupo: {GRUPO_LINK}")
+        BOT.send_message(chat_id=telegram_id, text=f"☚ Acesse o grupo: {GRUPO_LINK}")
 
 # === Rota de Notificação Mercado Pago ===
 
