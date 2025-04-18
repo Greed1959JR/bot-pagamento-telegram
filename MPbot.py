@@ -312,8 +312,10 @@ def processar_pagamento(payment_id):
                 member_limit=1
             ).invite_link
             BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
-            BOT.send_message(chat_id=telegram_id, text=f"☚ Acesse o grupo com este link (válido por 10 minutos e para 1 uso):
-{link_convite}")
+            BOT.send_message(
+    chat_id=telegram_id,
+    text=f"☚ Acesse o grupo com este link (válido por 10 minutos e para 1 uso):\n{link_convite}"
+)
         except Exception as e:
             print(f"Erro ao criar link de convite: {e}")
             BOT.send_message(chat_id=telegram_id, text="⚠️ Pagamento aprovado, mas houve erro ao gerar o link de convite. Contate o suporte.")
