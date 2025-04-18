@@ -24,8 +24,8 @@ sdk = mercadopago.SDK(ACCESS_TOKEN)
 lock = Lock()
 
 PLANOS = {
-    "mensal": {"valor": 19.90, "dias": 0.0069},  # 10 minutos
-    "trimestral": {"valor": 52.90, "dias": 0.0069}  # 10 minutos
+    "mensal": {"valor": 5.00, "dias": 0, "minutos": 10},
+    "trimestral": {"valor": 52.90, "dias": 90}
 }
 
 USUARIO_ADMIN = "greedjr"
@@ -63,7 +63,6 @@ def carregar_temp_pagamento(preference_id):
         with open(TEMP_PREFS, 'r') as f:
             dados = json.load(f)
         return dados.get(preference_id)
-
 # === Rota para ver e gerenciar assinantes com autenticação ===
 
 @app.route("/painel", methods=["GET", "POST"])
@@ -110,8 +109,8 @@ def painel():
             continue
 
         nome = info.get("nome", "Desconhecido")
-        pagamento_fmt = datetime.strptime(info["pagamento"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
-        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")
+        pagamento_fmt = datetime.strptime(info["pagamento"], "%Y-%m-%d").strftime("%d/%m/%Y")
+        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d").strftime("%d/%m/%Y")
         html += f"<li><b>{nome}</b> (ID: {uid}) — Pagamento: {pagamento_fmt} | Vencimento: {vencimento_fmt} | Status: {info['status']} <button name='remover' value='{uid}'>Remover</button><input type='hidden' name='confirmar_remover' value='{uid}'></li>"
 
     html += """
@@ -120,83 +119,148 @@ def painel():
     """
     return html
 
-# === Webhook Telegram e Notificação Mercado Pago ===
+# === Webhook Telegram ===
 
-@app.route('/', methods=['POST'])
+@app.route("/", methods=["GET", "POST", "HEAD"])
 def webhook():
-    data = request.get_json()
+    if request.method in ["GET", "HEAD"]:
+        return "Bot de pagamento está ativo."
 
-    print("📬 Webhook recebido:")
-    print(json.dumps(data, indent=2))
+    update = telegram.Update.de_json(request.get_json(force=True), BOT)
 
-    if "message" in data:
-        update = telegram.Update.de_json(data, BOT)
-        if update.message and update.message.text:
-            texto = update.message.text.lower()
-            chat_id = update.message.chat_id
+    if update.message:
+        chat_id = update.message.chat.id
+        user_id = update.message.from_user.id
+        texto = update.message.text.lower()
 
-            if texto == "/start":
-                BOT.send_message(chat_id=chat_id, text="👋 Bem-vindo! Escolha um plano:")
-                BOT.send_message(chat_id=chat_id, text="Mensal: R$ 19,90\nTrimestral: R$ 52,90")
-
-            elif "mensal" in texto:
-                preference_data = {
-                    "items": [
-                        {
-                            "title": "Assinatura Mensal",
-                            "quantity": 1,
-                            "unit_price": PLANOS["mensal"]["valor"]
-                        }
+        if texto == "/start":
+            BOT.send_message(
+                chat_id=chat_id,
+                text="Bem-vindo ao Bot de Apostas! Use o menu abaixo para navegar.",
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [
+                        telegram.InlineKeyboardButton("💰 Pagar (Mensal)", callback_data="pagar_mensal"),
+                        telegram.InlineKeyboardButton("💰 Pagar (Trimestral)", callback_data="pagar_trimestral")
                     ],
-                    "metadata": {
-                        "telegram_id": str(chat_id),
-                        "plano": "mensal"
-                    },
-                    "back_urls": {
-                        "success": "https://www.google.com"
-                    }
-                }
-                pref = sdk.preference().create(preference_data)
-                pref_id = pref["response"]["id"]
-                salvar_temp_pagamento(pref_id, chat_id, "mensal")
-                BOT.send_message(chat_id=chat_id, text=f"💳 Pague aqui: {pref['response']['init_point']}")
+                    [telegram.InlineKeyboardButton("📄 Ver Planos", callback_data="planos")],
+                    [telegram.InlineKeyboardButton("❓ Ajuda", callback_data="ajuda")]
+                ])
+            )
 
-            elif "trimestral" in texto:
-                preference_data = {
-                    "items": [
-                        {
-                            "title": "Assinatura Trimestral",
-                            "quantity": 1,
-                            "unit_price": PLANOS["trimestral"]["valor"]
-                        }
-                    ],
-                    "metadata": {
-                        "telegram_id": str(chat_id),
-                        "plano": "trimestral"
-                    },
-                    "back_urls": {
-                        "success": "https://www.google.com"
-                    }
-                }
-                pref = sdk.preference().create(preference_data)
-                pref_id = pref["response"]["id"]
-                salvar_temp_pagamento(pref_id, chat_id, "trimestral")
-                BOT.send_message(chat_id=chat_id, text=f"💳 Pague aqui: {pref['response']['init_point']}")
-
-            elif "ajuda" in texto:
-                BOT.send_message(chat_id=chat_id, text="ℹ️ Planos disponíveis:\nMensal: R$ 19,90\nTrimestral: R$ 52,90\nDúvidas? suporte: overgeared1959@gmail.com")
-
-    elif data.get("type") == "payment":
-        payment_id = data.get("data", {}).get("id")
-        if payment_id:
-            processar_pagamento(payment_id)
+        elif texto == "/status":
+            dados = carregar_dados()
+            info = dados.get(str(user_id))
+            if info:
+                venc = datetime.strptime(info["vencimento"], "%Y-%m-%d")
+                dias = (venc - datetime.now()).days
+                BOT.send_message(chat_id=chat_id, text=f"✅ Sua assinatura está ativa. Vence em {dias} dia(s), em {info['vencimento']}.")
+            else:
+                BOT.send_message(chat_id=chat_id, text="❌ Você não possui uma assinatura ativa.")
         else:
-            print("❌ Notificação recebida, mas sem payment_id.")
+            BOT.send_message(chat_id=chat_id, text="❌ Comando inválido. Por favor, use o menu abaixo:")
+            BOT.send_message(
+                chat_id=chat_id,
+                text="Escolha uma opção:",
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [
+                        telegram.InlineKeyboardButton("💰 Pagar (Mensal)", callback_data="pagar_mensal"),
+                        telegram.InlineKeyboardButton("💰 Pagar (Trimestral)", callback_data="pagar_trimestral")
+                    ],
+                    [telegram.InlineKeyboardButton("📄 Ver Planos", callback_data="planos")],
+                    [telegram.InlineKeyboardButton("❓ Ajuda", callback_data="ajuda")]
+                ])
+            )
 
-    return Response(status=200)
+    elif update.callback_query:
+        query = update.callback_query
+        query.answer()
+        user_id = query.from_user.id
+        chat_id = query.message.chat.id
+
+        if query.data.startswith("pagar_"):
+            plano = query.data.replace("pagar_", "")
+            if plano not in PLANOS:
+                BOT.send_message(chat_id=chat_id, text="Plano inválido.")
+                return "ok"
+
+            plano_info = PLANOS[plano]
+            url_base = os.getenv("WEBHOOK_URL")
+            if not url_base.endswith("/notificacao"):
+                url_base += "/notificacao"
+
+            preference_data = {
+                "items": [
+                    {
+                        "title": f"Assinatura {plano} do grupo",
+                        "quantity": 1,
+                        "currency_id": "BRL",
+                        "unit_price": plano_info["valor"]
+                    }
+                ],
+                "back_urls": {
+                    "success": "https://t.me/seu_bot",
+                    "failure": "https://t.me/seu_bot",
+                    "pending": "https://t.me/seu_bot"
+                },
+                "auto_return": "approved",
+                "notification_url": url_base
+            }
+
+            preference = sdk.preference().create(preference_data)
+            checkout_url = preference["response"]["init_point"]
+            preference_id = preference["response"]["id"]
+
+            salvar_temp_pagamento(preference_id, user_id, plano)
+            BOT.send_message(chat_id=chat_id, text="💳 Clique no link abaixo para pagar com Mercado Pago:")
+            BOT.send_message(chat_id=chat_id, text=checkout_url)
+            BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
+
+        elif query.data == "planos":
+            mensagem = "📋 *Planos disponíveis:*\n\n🔝 Plano Mensal: R$ 19.9 — 30 dias\n🔝 Plano Trimestral: R$ 52.9 — 90 dias"
+            BOT.send_message(
+                chat_id=chat_id,
+                text=mensagem,
+                parse_mode=telegram.ParseMode.MARKDOWN,
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [telegram.InlineKeyboardButton("🔙 Voltar", callback_data="voltar_menu")]
+                ])
+            )
+
+        elif query.data == "ajuda":
+            ajuda_texto = (
+                "❓ *Ajuda do Bot*\n\n"
+                "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
+                "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
+                "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com"
+            )
+            BOT.send_message(
+                chat_id=chat_id,
+                text=ajuda_texto,
+                parse_mode=telegram.ParseMode.MARKDOWN,
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [telegram.InlineKeyboardButton("🔙 Voltar", callback_data="voltar_menu")]
+                ])
+            )
+
+        elif query.data == "voltar_menu":
+            BOT.send_message(
+                chat_id=chat_id,
+                text="Escolha uma opção:",
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [
+                        telegram.InlineKeyboardButton("💰 Pagar (Mensal)", callback_data="pagar_mensal"),
+                        telegram.InlineKeyboardButton("💰 Pagar (Trimestral)", callback_data="pagar_trimestral")
+                    ],
+                    [telegram.InlineKeyboardButton("📄 Ver Planos", callback_data="planos")],
+                    [telegram.InlineKeyboardButton("❓ Ajuda", callback_data="ajuda")]
+                ])
+            )
+
+    return "ok"
 
 # === Processamento de Pagamento ===
-ef processar_pagamento(payment_id):
+
+def processar_pagamento(payment_id):
     payment_info = sdk.payment().get(payment_id)
     response = payment_info.get("response", {})
     status = response.get("status")
@@ -221,7 +285,9 @@ ef processar_pagamento(payment_id):
 
     telegram_id = temp["telegram_id"]
     plano = temp["plano"]
-    dias = PLANOS.get(plano, {}).get("dias", 0.0069)
+    plano_info = PLANOS.get(plano, {})
+    minutos = plano_info.get("minutos")
+    dias = plano_info.get("dias", 0)
 
     if status == "approved" and telegram_id:
         try:
@@ -232,8 +298,14 @@ ef processar_pagamento(payment_id):
 
         dados = carregar_dados()
         agora = datetime.now()
-        hoje = agora.strftime("%Y-%m-%d %H:%M:%S")
-        vencimento = (agora + timedelta(days=dias)).strftime("%Y-%m-%d %H:%M:%S")
+        hoje = agora.strftime("%Y-%m-%d")
+
+        if minutos:
+            vencimento_dt = agora + timedelta(minutes=minutos)
+        else:
+            vencimento_dt = agora + timedelta(days=dias)
+
+        vencimento = vencimento_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         dados[str(telegram_id)] = {
             "pagamento": hoje,
@@ -268,8 +340,7 @@ def notificacao():
                 processar_pagamento(payment_id)
 
     return "ok"
-
-# === Verificação Diária de Vencimentos ===
+# === Verificação Diária de Vencimentos (ajustada para 10 minutos e notificação 4 minutos antes) ===
 
 def verificar_vencimentos():
     while True:
@@ -279,16 +350,20 @@ def verificar_vencimentos():
 
         for uid, info in list(dados.items()):
             if info["status"] == "ativo":
-                vencimento = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S")
-                dias_restantes = (vencimento - agora).total_seconds() / 60  # em minutos
+                try:
+                    vencimento_dt = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    vencimento_dt = datetime.strptime(info["vencimento"], "%Y-%m-%d")
 
-                if 3.5 < dias_restantes <= 4:  # 4 minutos antes do vencimento
+                minutos_restantes = int((vencimento_dt - agora).total_seconds() // 60)
+
+                if minutos_restantes == 4:
                     try:
-                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence em 4 minutos. Renove para continuar no grupo sem interrupções.")
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura expira em 4 minutos. Renove para continuar no grupo sem interrupções.")
                     except Exception as e:
                         print(f"Erro ao avisar {uid}: {e}")
 
-                if agora > vencimento:
+                if vencimento_dt <= agora:
                     try:
                         BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
                         BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
@@ -298,6 +373,7 @@ def verificar_vencimentos():
                     dados[uid]["status"] = "inativo"
 
         salvar_dados(dados)
+# === Iniciar verificação e app Flask ===
 
 verificacao_thread = Thread(target=verificar_vencimentos)
 verificacao_thread.daemon = True
