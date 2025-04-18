@@ -24,7 +24,7 @@ sdk = mercadopago.SDK(ACCESS_TOKEN)
 lock = Lock()
 
 PLANOS = {
-    "mensal": {"valor": 5.00, "dias": 0, "minutos": 10},
+    "mensal": {"valor": 19.90, "dias": 30},
     "trimestral": {"valor": 52.90, "dias": 90}
 }
 
@@ -63,6 +63,7 @@ def carregar_temp_pagamento(preference_id):
         with open(TEMP_PREFS, 'r') as f:
             dados = json.load(f)
         return dados.get(preference_id)
+
 # === Rota para ver e gerenciar assinantes com autenticação ===
 
 @app.route("/painel", methods=["GET", "POST"])
@@ -260,6 +261,8 @@ def webhook():
 
 # === Processamento de Pagamento ===
 
+
+
 def processar_pagamento(payment_id):
     payment_info = sdk.payment().get(payment_id)
     response = payment_info.get("response", {})
@@ -285,9 +288,7 @@ def processar_pagamento(payment_id):
 
     telegram_id = temp["telegram_id"]
     plano = temp["plano"]
-    plano_info = PLANOS.get(plano, {})
-    minutos = plano_info.get("minutos")
-    dias = plano_info.get("dias", 0)
+    dias = PLANOS.get(plano, {}).get("dias", 30)
 
     if status == "approved" and telegram_id:
         try:
@@ -297,15 +298,8 @@ def processar_pagamento(payment_id):
             return
 
         dados = carregar_dados()
-        agora = datetime.now()
-        hoje = agora.strftime("%Y-%m-%d")
-
-        if minutos:
-            vencimento_dt = agora + timedelta(minutes=minutos)
-        else:
-            vencimento_dt = agora + timedelta(days=dias)
-
-        vencimento = vencimento_dt.strftime("%Y-%m-%d %H:%M:%S")
+        hoje = datetime.now().strftime("%Y-%m-%d")
+        vencimento = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
 
         dados[str(telegram_id)] = {
             "pagamento": hoje,
@@ -340,30 +334,24 @@ def notificacao():
                 processar_pagamento(payment_id)
 
     return "ok"
-# === Verificação Diária de Vencimentos (ajustada para 10 minutos e notificação 4 minutos antes) ===
+
+# === Verificação Diária de Vencimentos ===
 
 def verificar_vencimentos():
     while True:
         time.sleep(30)
         dados = carregar_dados()
-        agora = datetime.now()
+        hoje = datetime.now().strftime("%Y-%m-%d")
 
         for uid, info in list(dados.items()):
             if info["status"] == "ativo":
-                try:
-                    vencimento_dt = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    vencimento_dt = datetime.strptime(info["vencimento"], "%Y-%m-%d")
-
-                minutos_restantes = int((vencimento_dt - agora).total_seconds() // 60)
-
-                if minutos_restantes == 4:
+                dias_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d") - datetime.now()).days
+                if dias_restantes == 1:
                     try:
-                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura expira em 4 minutos. Renove para continuar no grupo sem interrupções.")
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence amanhã. Renove para continuar no grupo sem interrupções.")
                     except Exception as e:
                         print(f"Erro ao avisar {uid}: {e}")
-
-                if vencimento_dt <= agora:
+                if info["vencimento"] < hoje:
                     try:
                         BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
                         BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
@@ -373,7 +361,6 @@ def verificar_vencimentos():
                     dados[uid]["status"] = "inativo"
 
         salvar_dados(dados)
-# === Iniciar verificação e app Flask ===
 
 verificacao_thread = Thread(target=verificar_vencimentos)
 verificacao_thread.daemon = True
