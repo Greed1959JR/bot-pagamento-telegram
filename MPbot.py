@@ -24,7 +24,7 @@ sdk = mercadopago.SDK(ACCESS_TOKEN)
 lock = Lock()
 
 PLANOS = {
-    "mensal": {"valor": 5.00, "dias": 0.583},  # 14 horas = 0.583 dias
+    "mensal": {"valor": 5.00, "dias": 10 / (24 * 60)},  # 10 minutos = 10 / 1440 dias
     "trimestral": {"valor": 52.90, "dias": 90}
 }
 
