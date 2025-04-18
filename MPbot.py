@@ -73,9 +73,18 @@ def painel():
 
     if request.method == "POST":
         uid_remover = request.form.get("remover")
-        if uid_remover in dados:
-            del dados[uid_remover]
-            salvar_dados(dados)
+        confirmar = request.form.get("confirmar_remover")
+
+        if uid_remover and confirmar == uid_remover:
+            if uid_remover in dados:
+                try:
+                    BOT.send_message(chat_id=int(uid_remover), text="❌ Sua assinatura foi encerrada manualmente pelo administrador.")
+                    BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid_remover))
+                    BOT.unban_chat_member(chat_id=GROUP_ID, user_id=int(uid_remover))
+                except Exception as e:
+                    print(f"Erro ao remover manualmente {uid_remover}: {e}")
+                del dados[uid_remover]
+                salvar_dados(dados)
             return redirect(url_for('painel'))
 
     filtro = request.args.get("filtro", "ativos")
@@ -88,7 +97,7 @@ def painel():
                 <option value='todos' {'selected' if filtro == 'todos' else ''}>Todos</option>
             </select>
         </form>
-        <form method='post'>
+        <form method='post' onsubmit="return confirm('Tem certeza que deseja remover este usuário?');">
         <ul>
     """
     for uid, info in dados.items():
@@ -100,7 +109,7 @@ def painel():
         nome = info.get("nome", "Desconhecido")
         pagamento_fmt = datetime.strptime(info["pagamento"], "%Y-%m-%d").strftime("%d/%m/%Y")
         vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d").strftime("%d/%m/%Y")
-        html += f"<li><b>{nome}</b> (ID: {uid}) — Pagamento: {pagamento_fmt} | Vencimento: {vencimento_fmt} | Status: {info['status']} <button name='remover' value='{uid}'>Remover</button></li>"
+        html += f"<li><b>{nome}</b> (ID: {uid}) — Pagamento: {pagamento_fmt} | Vencimento: {vencimento_fmt} | Status: {info['status']} <button name='remover' value='{uid}'>Remover</button><input type='hidden' name='confirmar_remover' value='{uid}'></li>"
 
     html += """
         </ul>
