@@ -14,7 +14,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
 BOT = telegram.Bot(token=TELEGRAM_TOKEN)
 GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
-GRUPO_LINK = os.getenv("GRUPO_LINK")
+
 
 DB_FILE = "assinantes.json"
 TEMP_PREFS = "pagamentos_temp.json"
@@ -260,8 +260,6 @@ def webhook():
     return "ok"
 # === Processamento de Pagamento ===
 
-
-
 def processar_pagamento(payment_id):
     payment_info = sdk.payment().get(payment_id)
     response = payment_info.get("response", {})
@@ -307,10 +305,21 @@ def processar_pagamento(payment_id):
         }
         salvar_dados(dados)
 
-        BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
-        BOT.send_message(chat_id=telegram_id, text=f"☚ Acesse o grupo: {GRUPO_LINK}")
+        try:
+            link_convite = BOT.create_chat_invite_link(
+                chat_id=GROUP_ID,
+                expire_date=int((datetime.now() + timedelta(minutes=10)).timestamp()),
+                member_limit=1
+            ).invite_link
+            BOT.send_message(chat_id=telegram_id, text="✅ Pagamento aprovado! Você foi liberado no grupo.")
+            BOT.send_message(chat_id=telegram_id, text=f"☚ Acesse o grupo com este link (válido por 10 minutos e para 1 uso):
+{link_convite}")
+        except Exception as e:
+            print(f"Erro ao criar link de convite: {e}")
+            BOT.send_message(chat_id=telegram_id, text="⚠️ Pagamento aprovado, mas houve erro ao gerar o link de convite. Contate o suporte.")
 
-# === Notificação do Mercado Pago ===
+
+# === Rota de Notificação Mercado Pago ===
 
 @app.route("/notificacao", methods=["POST"])
 def notificacao():
@@ -364,7 +373,6 @@ def verificar_vencimentos():
 verificacao_thread = Thread(target=verificar_vencimentos)
 verificacao_thread.daemon = True
 verificacao_thread.start()
-
 if __name__ == '__main__':
     print("Rodando localmente. Em produção, use gunicorn.")
     app.run(host='0.0.0.0', port=5000)
