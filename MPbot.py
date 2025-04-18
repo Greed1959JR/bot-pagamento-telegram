@@ -129,7 +129,7 @@ def webhook():
 
     update = telegram.Update.de_json(request.get_json(force=True), BOT)
 
-    if update.message:
+    if update.message and update.message.text:
         chat_id = update.message.chat.id
         user_id = update.message.from_user.id
         texto = update.message.text.lower()
