@@ -66,6 +66,11 @@ def carregar_temp_pagamento(preference_id):
 
 # === Rota para ver e gerenciar assinantes com autenticação ===
 
+import os
+
+USUARIO_ADMIN = os.getenv("USUARIO_ADMIN")
+SENHA_ADMIN = os.getenv("SENHA_ADMIN")
+
 @app.route("/painel", methods=["GET", "POST"])
 def painel():
     auth = request.authorization
@@ -108,23 +113,26 @@ def painel():
             salvar_dados(dados)
             return redirect(url_for('painel'))
 
-    # FILTRO de visualização
     filtro = request.args.get("filtro", "ativos")
     html = f"""
         <html>
         <head>
             <title>Painel de Assinantes</title>
             <style>
-                body {{ font-family: Arial; padding: 20px; background: #f4f4f4; }}
-                h2 {{ color: #333; }}
+                body {{ font-family: 'Segoe UI', sans-serif; background: #ecf0f1; padding: 30px; }}
+                h2 {{ color: #2c3e50; }}
                 .ativo {{ color: green; }}
                 .inativo {{ color: red; }}
-                li {{ margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 1px 1px 4px #ccc; }}
-                .btn-remove {{ background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }}
-                .add-form {{ background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 1px 1px 4px #ccc; }}
+                select, input[type=text], input[type=submit] {{ padding: 8px; margin: 5px 0; border-radius: 6px; border: 1px solid #ccc; width: 100%; }}
+                .container {{ background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); max-width: 800px; margin: auto; }}
+                .user-card {{ margin: 15px 0; padding: 15px; border-left: 5px solid #3498db; background: #fdfdfd; border-radius: 6px; }}
+                .btn-remove {{ background: #e74c3c; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }}
+                .add-form {{ background: #f8f8f8; padding: 20px; border: 1px solid #ddd; border-radius: 10px; margin-top: 20px; }}
+                label {{ display: block; margin-top: 10px; }}
             </style>
         </head>
         <body>
+            <div class='container'>
             <h2>Painel de Assinantes ({filtro.title()}):</h2>
             <form method='get'>
                 <select name='filtro' onchange='this.form.submit()'>
@@ -137,20 +145,20 @@ def painel():
             <div class='add-form'>
                 <h3>Adicionar Usuário Manualmente</h3>
                 <form method='post'>
-                    <label>ID Telegram: <input type='text' name='novo_id' required></label><br>
-                    <label>Nome: <input type='text' name='novo_nome' required></label><br>
-                    <label>Plano:
-                        <select name='novo_plano' required>
-                            <option value='mensal'>Mensal</option>
-                            <option value='trimestral'>Trimestral</option>
-                        </select>
-                    </label><br><br>
+                    <label>ID Telegram:</label>
+                    <input type='text' name='novo_id' required>
+                    <label>Nome:</label>
+                    <input type='text' name='novo_nome' required>
+                    <label>Plano:</label>
+                    <select name='novo_plano' required>
+                        <option value='mensal'>Mensal</option>
+                        <option value='trimestral'>Trimestral</option>
+                    </select><br><br>
                     <input type='submit' value='Adicionar Assinante'>
                 </form>
             </div>
 
             <form method='post' onsubmit="return confirm('Tem certeza que deseja remover este usuário?');">
-                <ul>
     """
 
     for uid, info in dados.items():
@@ -164,7 +172,6 @@ def painel():
         vencimento = datetime.strptime(info["vencimento"], "%Y-%m-%d")
         status = info["status"]
 
-        # Tempo restante
         agora = datetime.now()
         tempo_restante = vencimento - agora
         dias = tempo_restante.days
@@ -173,7 +180,7 @@ def painel():
         tempo_fmt = f"{dias}d {horas}h {minutos}m" if tempo_restante.total_seconds() > 0 else "Expirado"
 
         html += f"""
-            <li>
+            <div class='user-card'>
                 <b>{nome}</b> (ID: {uid})<br>
                 <b>Pagamento:</b> {pagamento.strftime("%d/%m/%Y")} | 
                 <b>Vencimento:</b> {vencimento.strftime("%d/%m/%Y")}<br>
@@ -181,12 +188,12 @@ def painel():
                 <b>Tempo restante:</b> {tempo_fmt}<br>
                 <button class='btn-remove' name='remover' value='{uid}'>Remover</button>
                 <input type='hidden' name='confirmar_remover' value='{uid}'>
-            </li>
+            </div>
         """
 
     html += """
-                </ul>
             </form>
+            </div>
         </body>
         </html>
     """
