@@ -74,6 +74,7 @@ def painel():
 
     dados = carregar_dados()
 
+    # Remover usuário manualmente
     if request.method == "POST":
         uid_remover = request.form.get("remover")
         confirmar = request.form.get("confirmar_remover")
@@ -90,19 +91,68 @@ def painel():
                 salvar_dados(dados)
             return redirect(url_for('painel'))
 
+        # Adicionar usuário manualmente
+        novo_id = request.form.get("novo_id")
+        novo_nome = request.form.get("novo_nome")
+        novo_plano = request.form.get("novo_plano")
+        if novo_id and novo_nome and novo_plano:
+            dias = PLANOS.get(novo_plano, {}).get("dias", 30)
+            hoje = datetime.now()
+            vencimento = hoje + timedelta(days=dias)
+            dados[novo_id] = {
+                "nome": novo_nome,
+                "pagamento": hoje.strftime("%Y-%m-%d"),
+                "vencimento": vencimento.strftime("%Y-%m-%d"),
+                "status": "ativo"
+            }
+            salvar_dados(dados)
+            return redirect(url_for('painel'))
+
+    # FILTRO de visualização
     filtro = request.args.get("filtro", "ativos")
     html = f"""
-        <h2>Painel de Assinantes ({filtro}):</h2>
-        <form method='get'>
-            <select name='filtro' onchange='this.form.submit()'>
-                <option value='ativos' {'selected' if filtro == 'ativos' else ''}>Ativos</option>
-                <option value='inativos' {'selected' if filtro == 'inativos' else ''}>Inativos</option>
-                <option value='todos' {'selected' if filtro == 'todos' else ''}>Todos</option>
-            </select>
-        </form>
-        <form method='post' onsubmit="return confirm('Tem certeza que deseja remover este usuário?');">
-        <ul>
+        <html>
+        <head>
+            <title>Painel de Assinantes</title>
+            <style>
+                body {{ font-family: Arial; padding: 20px; background: #f4f4f4; }}
+                h2 {{ color: #333; }}
+                .ativo {{ color: green; }}
+                .inativo {{ color: red; }}
+                li {{ margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 1px 1px 4px #ccc; }}
+                .btn-remove {{ background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }}
+                .add-form {{ background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 1px 1px 4px #ccc; }}
+            </style>
+        </head>
+        <body>
+            <h2>Painel de Assinantes ({filtro.title()}):</h2>
+            <form method='get'>
+                <select name='filtro' onchange='this.form.submit()'>
+                    <option value='ativos' {'selected' if filtro == 'ativos' else ''}>Ativos</option>
+                    <option value='inativos' {'selected' if filtro == 'inativos' else ''}>Inativos</option>
+                    <option value='todos' {'selected' if filtro == 'todos' else ''}>Todos</option>
+                </select>
+            </form>
+
+            <div class='add-form'>
+                <h3>Adicionar Usuário Manualmente</h3>
+                <form method='post'>
+                    <label>ID Telegram: <input type='text' name='novo_id' required></label><br>
+                    <label>Nome: <input type='text' name='novo_nome' required></label><br>
+                    <label>Plano:
+                        <select name='novo_plano' required>
+                            <option value='mensal'>Mensal</option>
+                            <option value='trimestral'>Trimestral</option>
+                        </select>
+                    </label><br><br>
+                    <input type='submit' value='Adicionar Assinante'>
+                </form>
+            </div>
+
+            <form method='post' onsubmit="return confirm('Tem certeza que deseja remover este usuário?');">
+                <ul>
     """
+
     for uid, info in dados.items():
         if filtro == "ativos" and info.get("status") != "ativo":
             continue
@@ -110,13 +160,35 @@ def painel():
             continue
 
         nome = info.get("nome", "Desconhecido")
-        pagamento_fmt = datetime.strptime(info["pagamento"], "%Y-%m-%d").strftime("%d/%m/%Y")
-        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d").strftime("%d/%m/%Y")
-        html += f"<li><b>{nome}</b> (ID: {uid}) — Pagamento: {pagamento_fmt} | Vencimento: {vencimento_fmt} | Status: {info['status']} <button name='remover' value='{uid}'>Remover</button><input type='hidden' name='confirmar_remover' value='{uid}'></li>"
+        pagamento = datetime.strptime(info["pagamento"], "%Y-%m-%d")
+        vencimento = datetime.strptime(info["vencimento"], "%Y-%m-%d")
+        status = info["status"]
+
+        # Tempo restante
+        agora = datetime.now()
+        tempo_restante = vencimento - agora
+        dias = tempo_restante.days
+        horas = tempo_restante.seconds // 3600
+        minutos = (tempo_restante.seconds % 3600) // 60
+        tempo_fmt = f"{dias}d {horas}h {minutos}m" if tempo_restante.total_seconds() > 0 else "Expirado"
+
+        html += f"""
+            <li>
+                <b>{nome}</b> (ID: {uid})<br>
+                <b>Pagamento:</b> {pagamento.strftime("%d/%m/%Y")} | 
+                <b>Vencimento:</b> {vencimento.strftime("%d/%m/%Y")}<br>
+                <b>Status:</b> <span class="{status}">{status.title()}</span><br>
+                <b>Tempo restante:</b> {tempo_fmt}<br>
+                <button class='btn-remove' name='remover' value='{uid}'>Remover</button>
+                <input type='hidden' name='confirmar_remover' value='{uid}'>
+            </li>
+        """
 
     html += """
-        </ul>
-        </form>
+                </ul>
+            </form>
+        </body>
+        </html>
     """
     return html
 
