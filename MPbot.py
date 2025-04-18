@@ -5,7 +5,7 @@ from flask import Flask, request
 import telegram
 import mercadopago
 from dotenv import load_dotenv
-from threading import Thread
+from threading import Thread, Lock
 import time
 
 load_dotenv()
@@ -21,6 +21,7 @@ TEMP_PREFS = "pagamentos_temp.json"
 
 app = Flask(__name__)
 sdk = mercadopago.SDK(ACCESS_TOKEN)
+lock = Lock()
 
 ASSINATURA_VALOR = 10.00
 DIAS_ASSINATURA = 1
@@ -28,31 +29,35 @@ DIAS_ASSINATURA = 1
 # === Utilitários de Banco de Dados ===
 
 def carregar_dados():
-    if not os.path.exists(DB_FILE):
-        return {}
-    with open(DB_FILE, 'r') as f:
-        return json.load(f)
+    with lock:
+        if not os.path.exists(DB_FILE):
+            return {}
+        with open(DB_FILE, 'r') as f:
+            return json.load(f)
 
 def salvar_dados(dados):
-    with open(DB_FILE, 'w') as f:
-        json.dump(dados, f, indent=4)
+    with lock:
+        with open(DB_FILE, 'w') as f:
+            json.dump(dados, f, indent=4)
 
 def salvar_temp_pagamento(preference_id, telegram_id):
-    if os.path.exists(TEMP_PREFS):
-        with open(TEMP_PREFS, 'r') as f:
-            dados = json.load(f)
-    else:
-        dados = {}
-    dados[preference_id] = telegram_id
-    with open(TEMP_PREFS, 'w') as f:
-        json.dump(dados, f)
+    with lock:
+        if os.path.exists(TEMP_PREFS):
+            with open(TEMP_PREFS, 'r') as f:
+                dados = json.load(f)
+        else:
+            dados = {}
+        dados[preference_id] = telegram_id
+        with open(TEMP_PREFS, 'w') as f:
+            json.dump(dados, f)
 
 def carregar_temp_pagamento(preference_id):
-    if not os.path.exists(TEMP_PREFS):
-        return None
-    with open(TEMP_PREFS, 'r') as f:
-        dados = json.load(f)
-    return dados.get(preference_id)
+    with lock:
+        if not os.path.exists(TEMP_PREFS):
+            return None
+        with open(TEMP_PREFS, 'r') as f:
+            dados = json.load(f)
+        return dados.get(preference_id)
 
 # === Rota Principal (Telegram Bot) ===
 
@@ -140,7 +145,6 @@ def processar_pagamento(payment_id):
     preference_id = response.get("preference_id")
 
     if not preference_id:
-        # Tenta obter o preference_id via merchant_order
         order_id = response.get("order", {}).get("id")
         if order_id:
             try:
