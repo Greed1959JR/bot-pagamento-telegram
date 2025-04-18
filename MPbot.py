@@ -24,8 +24,8 @@ sdk = mercadopago.SDK(ACCESS_TOKEN)
 lock = Lock()
 
 PLANOS = {
-    "mensal": {"valor": 5.00, "dias": 10 / (24 * 60)},  # 10 minutos = 10 / 1440 dias
-    "trimestral": {"valor": 52.90, "dias": 90}
+    "mensal": {"valor": 19.90, "dias": 0.0069},  # 10 minutos
+    "trimestral": {"valor": 52.90, "dias": 0.0069}  # 10 minutos
 }
 
 USUARIO_ADMIN = "greedjr"
@@ -111,7 +111,7 @@ def painel():
 
         nome = info.get("nome", "Desconhecido")
         pagamento_fmt = datetime.strptime(info["pagamento"], "%Y-%m-%d").strftime("%d/%m/%Y")
-        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y")
+        vencimento_fmt = datetime.strptime(info["vencimento"], "%Y-%m-%d").strftime("%d/%m/%Y")
         html += f"<li><b>{nome}</b> (ID: {uid}) — Pagamento: {pagamento_fmt} | Vencimento: {vencimento_fmt} | Status: {info['status']} <button name='remover' value='{uid}'>Remover</button><input type='hidden' name='confirmar_remover' value='{uid}'></li>"
 
     html += """
@@ -119,6 +119,7 @@ def painel():
         </form>
     """
     return html
+
 
 # === Webhook Telegram ===
 
@@ -259,6 +260,7 @@ def webhook():
 
     return "ok"
 
+
 # === Processamento de Pagamento ===
 
 def processar_pagamento(payment_id):
@@ -286,7 +288,7 @@ def processar_pagamento(payment_id):
 
     telegram_id = temp["telegram_id"]
     plano = temp["plano"]
-    dias = PLANOS.get(plano, {}).get("dias", 30)
+    dias = PLANOS.get(plano, {}).get("dias", 0.0069)
 
     if status == "approved" and telegram_id:
         try:
@@ -296,8 +298,9 @@ def processar_pagamento(payment_id):
             return
 
         dados = carregar_dados()
-        hoje = datetime.now().strftime("%Y-%m-%d")
-        vencimento = (datetime.now() + timedelta(hours=14)).strftime("%Y-%m-%d %H:%M:%S") if plano == "mensal" else (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
+        agora = datetime.now()
+        hoje = agora.strftime("%Y-%m-%d %H:%M:%S")
+        vencimento = (agora + timedelta(days=dias)).strftime("%Y-%m-%d %H:%M:%S")
 
         dados[str(telegram_id)] = {
             "pagamento": hoje,
@@ -339,17 +342,20 @@ def verificar_vencimentos():
     while True:
         time.sleep(30)
         dados = carregar_dados()
-        hoje = datetime.now().strftime("%Y-%m-%d")
+        agora = datetime.now()
 
         for uid, info in list(dados.items()):
             if info["status"] == "ativo":
-                horas_restantes = (datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S") - datetime.now()).total_seconds() / 3600
-                if 0.9 <= horas_restantes <= 1.1:
+                vencimento = datetime.strptime(info["vencimento"], "%Y-%m-%d %H:%M:%S")
+                dias_restantes = (vencimento - agora).total_seconds() / 60  # em minutos
+
+                if 3.5 < dias_restantes <= 4:  # 4 minutos antes do vencimento
                     try:
-                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura expira em 1 hora. Renove para continuar no grupo sem interrupções.")
+                        BOT.send_message(chat_id=int(uid), text="⏳ Sua assinatura vence em 4 minutos. Renove para continuar no grupo sem interrupções.")
                     except Exception as e:
                         print(f"Erro ao avisar {uid}: {e}")
-                if info["vencimento"] < hoje:
+
+                if agora > vencimento:
                     try:
                         BOT.send_message(chat_id=int(uid), text="⚠️ Sua assinatura expirou. Você será removido do grupo.")
                         BOT.ban_chat_member(chat_id=GROUP_ID, user_id=int(uid))
