@@ -337,7 +337,7 @@ def webhook():
                 "❓ *Ajuda do Bot*\n\n"
                 "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
                 "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
-                "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com"
+                "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com\n @overgeared_tips"
             )
             BOT.send_message(
                 chat_id=chat_id,
