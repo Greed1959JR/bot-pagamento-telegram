@@ -339,7 +339,7 @@ import os
                  "❓ *Ajuda do Bot*\n\n"
                  "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
                  "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
-                 "- Em caso de dúvidas, envie um email para: web.telegram.org/k/#@overgeared_tips"
+                 "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com"
              )
              BOT.send_message(
                  chat_id=chat_id,
