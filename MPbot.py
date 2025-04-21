@@ -333,7 +333,7 @@ def webhook():
              )
  
          elif query.data == "ajuda":
-      ajuda_texto = (
+        ajuda_texto = (
         "❓ *Ajuda do Bot*\n\n"
         "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
         "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
@@ -349,22 +349,19 @@ def webhook():
         ])
     )
  
-elif query.data == "ajuda":
-    ajuda_texto = (
-        "❓ *Ajuda do Bot*\n\n"
-        "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
-        "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
-        "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com\n"
-        "📬 Telegram: [@overgeared_tips](https://t.me/overgeared_tips)"
-    )
-    BOT.send_message(
-        chat_id=chat_id,
-        text=ajuda_texto,
-        parse_mode=telegram.ParseMode.MARKDOWN,
-        reply_markup=telegram.InlineKeyboardMarkup([
-            [telegram.InlineKeyboardButton("🔙 Voltar", callback_data="voltar_menu")]
-        ])
-    )
+         elif query.data == "voltar_menu":
+             BOT.send_message(
+                 chat_id=chat_id,
+                 text="Escolha uma opção:",
+                 reply_markup=telegram.InlineKeyboardMarkup([
+                     [
+                         telegram.InlineKeyboardButton("💰 Pagar (Mensal)", callback_data="pagar_mensal"),
+                         telegram.InlineKeyboardButton("💰 Pagar (Trimestral)", callback_data="pagar_trimestral")
+                     ],
+                     [telegram.InlineKeyboardButton("📄 Ver Planos", callback_data="planos")],
+                     [telegram.InlineKeyboardButton("❓ Ajuda", callback_data="ajuda")]
+                 ])
+             )
  
      return "ok"
 # === Processamento de Pagamento ===
