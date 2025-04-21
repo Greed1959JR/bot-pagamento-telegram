@@ -16,11 +16,7 @@ from threading import Thread, Lock
 
 import time
 
-
-
 load_dotenv()
-
-
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -30,23 +26,15 @@ BOT = telegram.Bot(token=TELEGRAM_TOKEN)
 
 GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
 
-
-
-
-
 DB_FILE = "assinantes.json"
 
 TEMP_PREFS = "pagamentos_temp.json"
-
-
 
 app = Flask(__name__)
 
 sdk = mercadopago.SDK(ACCESS_TOKEN)
 
 lock = Lock()
-
-
 
 PLANOS = {
 
@@ -56,17 +44,11 @@ PLANOS = {
 
 }
 
-
-
 USUARIO_ADMIN = "greedjr"
 
 SENHA_ADMIN = "camisa10JR"
 
-
-
 # === Utilitários de Banco de Dados ===
-
-
 
 def carregar_dados():
 
@@ -80,8 +62,6 @@ def carregar_dados():
 
             return json.load(f)
 
-
-
 def salvar_dados(dados):
 
     with lock:
@@ -89,8 +69,6 @@ def salvar_dados(dados):
         with open(DB_FILE, 'w') as f:
 
             json.dump(dados, f, indent=4)
-
-
 
 def salvar_temp_pagamento(preference_id, telegram_id, plano):
 
@@ -112,8 +90,6 @@ def salvar_temp_pagamento(preference_id, telegram_id, plano):
 
             json.dump(dados, f)
 
-
-
 def carregar_temp_pagamento(preference_id):
 
     with lock:
@@ -128,29 +104,19 @@ def carregar_temp_pagamento(preference_id):
 
         return dados.get(preference_id)
 
-
-
 # === Rota para ver e gerenciar assinantes com autenticação ===
 
-
-
 import os
-
-
 
 USUARIO_ADMIN = os.getenv("USUARIO_ADMIN")
 
 SENHA_ADMIN = os.getenv("SENHA_ADMIN")
-
-
 
 @app.route("/logout")
 
 def logout():
 
     return Response("Logout realizado.", 401, {"WWW-Authenticate": "Basic realm='Login Requerido'"})
-
-
 
 @app.route("/painel", methods=["GET", "POST"])
 
@@ -162,11 +128,7 @@ def painel():
 
         return Response("Acesso negado", 401, {"WWW-Authenticate": "Basic realm='Login Requerido'"})
 
-
-
     dados = carregar_dados()
-
-
 
     # Processar ações do formulário
 
@@ -177,8 +139,6 @@ def painel():
         uid_remover = request.form.get("remover")
 
         confirmar = request.form.get("confirmar_remover")
-
-
 
         if uid_remover and confirmar == uid_remover:
 
@@ -201,8 +161,6 @@ def painel():
                 salvar_dados(dados)
 
             return redirect(url_for('painel'))
-
-
 
         # Adicionar usuário manualmente
 
@@ -236,8 +194,6 @@ def painel():
 
             return redirect(url_for('painel'))
 
-
-
         # Gerar link de convite
 
         gerar_link_id = request.form.get("gerar_link")
@@ -263,8 +219,6 @@ def painel():
                 print(f"Erro ao gerar link para {gerar_link_id}: {e}")
 
             return redirect(url_for('painel'))
-
-
 
     filtro = request.args.get("filtro", "ativos")
 
@@ -332,8 +286,6 @@ def painel():
 
             </form>
 
-
-
             <div class='add-form'>
 
                 <h3>Adicionar Usuário Manualmente</h3>
@@ -364,13 +316,9 @@ def painel():
 
             </div>
 
-
-
             <form method='post' onsubmit="return confirm('Tem certeza que deseja remover este usuário?');">
 
     """
-
-
 
     for uid, info in dados.items():
 
@@ -382,8 +330,6 @@ def painel():
 
             continue
 
-
-
         nome = info.get("nome", "Desconhecido")
 
         pagamento = datetime.strptime(info["pagamento"], "%Y-%m-%d")
@@ -391,8 +337,6 @@ def painel():
         vencimento = datetime.strptime(info["vencimento"], "%Y-%m-%d")
 
         status = info["status"]
-
-
 
         agora = datetime.now()
 
@@ -406,15 +350,13 @@ def painel():
 
         tempo_fmt = f"{dias}d {horas}h {minutos}m" if tempo_restante.total_seconds() > 0 else "Expirado"
 
-
-
         html += f"""
 
             <div class='user-card'>
 
                 <b>{nome}</b> (ID: {uid})<br>
 
-                <b>Pagamento:</b> {pagamento.strftime("%d/%m/%Y")} | 
+                <b>Pagamento:</b> {pagamento.strftime("%d/%m/%Y")} |
 
                 <b>Vencimento:</b> {vencimento.strftime("%d/%m/%Y")}<br>
 
@@ -432,8 +374,6 @@ def painel():
 
         """
 
-
-
     html += """
 
             </form>
@@ -448,13 +388,7 @@ def painel():
 
     return html
 
-
-
-
-
 # === Webhook Telegram ===
-
-
 
 @app.route("/", methods=["GET", "POST", "HEAD"])
 
@@ -464,11 +398,7 @@ def webhook():
 
         return "Bot de pagamento está ativo."
 
-
-
     update = telegram.Update.de_json(request.get_json(force=True), BOT)
-
-
 
     if update.message and update.message.text:
 
@@ -477,8 +407,6 @@ def webhook():
         user_id = update.message.from_user.id
 
         texto = update.message.text.lower()
-
-
 
         if texto == "/start":
 
@@ -505,8 +433,6 @@ def webhook():
                 ])
 
             )
-
-
 
         elif texto == "/status":
 
@@ -554,8 +480,6 @@ def webhook():
 
             )
 
-
-
     elif update.callback_query:
 
         query = update.callback_query
@@ -565,8 +489,6 @@ def webhook():
         user_id = query.from_user.id
 
         chat_id = query.message.chat.id
-
-
 
         if query.data.startswith("pagar_"):
 
@@ -578,8 +500,6 @@ def webhook():
 
                 return "ok"
 
-
-
             plano_info = PLANOS[plano]
 
             url_base = os.getenv("WEBHOOK_URL")
@@ -587,8 +507,6 @@ def webhook():
             if not url_base.endswith("/notificacao"):
 
                 url_base += "/notificacao"
-
-
 
             preference_data = {
 
@@ -624,15 +542,11 @@ def webhook():
 
             }
 
-
-
             preference = sdk.preference().create(preference_data)
 
             checkout_url = preference["response"]["init_point"]
 
             preference_id = preference["response"]["id"]
-
-
 
             salvar_temp_pagamento(preference_id, user_id, plano)
 
@@ -641,8 +555,6 @@ def webhook():
             BOT.send_message(chat_id=chat_id, text=checkout_url)
 
             BOT.send_message(chat_id=chat_id, text="💡 Após o pagamento, aguarde a confirmação automática aqui mesmo.")
-
-
 
         elif query.data == "planos":
 
@@ -664,8 +576,6 @@ def webhook():
 
             )
 
-
-
         elif query.data == "ajuda":
 
             ajuda_texto = (
@@ -676,7 +586,7 @@ def webhook():
 
                 "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
 
-                "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com"
+                "- Em caso de dúvidas, entre em contato pelo Telegram: @overgeared_tips"
 
             )
 
@@ -695,8 +605,6 @@ def webhook():
                 ])
 
             )
-
-
 
         elif query.data == "voltar_menu":
 
@@ -724,13 +632,9 @@ def webhook():
 
             )
 
-
-
     return "ok"
 
 # === Processamento de Pagamento ===
-
-
 
 def processar_pagamento(payment_id):
 
@@ -741,8 +645,6 @@ def processar_pagamento(payment_id):
     status = response.get("status")
 
     preference_id = response.get("preference_id")
-
-
 
     if not preference_id:
 
@@ -760,15 +662,11 @@ def processar_pagamento(payment_id):
 
                 print(f"Erro ao buscar merchant_order: {e}")
 
-
-
     if not preference_id:
 
         print("❌ Erro: 'preference_id' não encontrado na resposta do pagamento.")
 
         return
-
-
 
     temp = carregar_temp_pagamento(preference_id)
 
@@ -776,15 +674,11 @@ def processar_pagamento(payment_id):
 
         return
 
-
-
     telegram_id = temp["telegram_id"]
 
     plano = temp["plano"]
 
     dias = PLANOS.get(plano, {}).get("dias", 30)
-
-
 
     if status == "approved" and telegram_id:
 
@@ -798,15 +692,11 @@ def processar_pagamento(payment_id):
 
             return
 
-
-
         dados = carregar_dados()
 
         hoje = datetime.now().strftime("%Y-%m-%d")
 
         vencimento = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
-
-
 
         dados[str(telegram_id)] = {
 
@@ -819,8 +709,6 @@ def processar_pagamento(payment_id):
         }
 
         salvar_dados(dados)
-
-
 
         try:
 
@@ -848,15 +736,9 @@ def processar_pagamento(payment_id):
 
             print(f"Erro ao criar link de convite: {e}")
 
-            BOT.send_message(chat_id=telegram_id, text="⚠️ Pagamento aprovado, mas houve erro ao gerar o link de convite. Contate o suporte.")
-
-
-
-
+            BOT.send_message(chat_id=telegram_id, text="⚠️ Pagamento aprovado, mas houve erro ao gerar o link de convite. Contate o suporte. (@overgeared_tips)")
 
 # === Rota de Notificação Mercado Pago ===
-
-
 
 @app.route("/notificacao", methods=["POST"])
 
@@ -868,15 +750,11 @@ def notificacao():
 
         return "ignorado"
 
-
-
     if data.get("type") == "payment":
 
         payment_id = data.get("data", {}).get("id")
 
         processar_pagamento(payment_id)
-
-
 
     elif data.get("type") == "merchant_order":
 
@@ -886,8 +764,6 @@ def notificacao():
 
         payments = order_info["response"].get("payments", [])
 
-
-
         for payment in payments:
 
             if payment["status"] == "approved":
@@ -896,15 +772,9 @@ def notificacao():
 
                 processar_pagamento(payment_id)
 
-
-
     return "ok"
 
-
-
 # === Verificação Diária de Vencimentos ===
-
-
 
 def verificar_vencimentos():
 
@@ -915,8 +785,6 @@ def verificar_vencimentos():
         dados = carregar_dados()
 
         hoje = datetime.now().strftime("%Y-%m-%d")
-
-
 
         for uid, info in list(dados.items()):
 
@@ -950,11 +818,7 @@ def verificar_vencimentos():
 
                     dados[uid]["status"] = "inativo"
 
-
-
         salvar_dados(dados)
-
-
 
 verificacao_thread = Thread(target=verificar_vencimentos)
 
@@ -966,4 +830,4 @@ if __name__ == '__main__':
 
     print("Rodando localmente. Em produção, use gunicorn.")
 
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.
