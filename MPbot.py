@@ -1,4 +1,4 @@
- import os
+import os
  import json
  from datetime import datetime, timedelta
  from flask import Flask, request, Response, redirect, url_for
@@ -83,7 +83,6 @@
  
      dados = carregar_dados()
  
-     # Remover usuário manualmente
      # Processar ações do formulário
      if request.method == "POST":
          # Remover usuário
@@ -143,7 +142,6 @@
                  h2 {{ color: #2c3e50; }}
                  .ativo {{ color: green; }}
                  .inativo {{ color: red; }}
-                 select, input[type=text], input[type=submit] {{ padding: 8px; margin: 5px 0; border-radius: 6px; border: 1px solid #ccc; width: 100%; }}
                  select, input[type=text], input[type=submit], button {{ padding: 8px; margin: 5px 0; border-radius: 6px; border: 1px solid #ccc; width: 100%; }}
                  .container {{ background: white; padding: 25px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); max-width: 800px; margin: auto; }}
                  .user-card {{ margin: 15px 0; padding: 15px; border-left: 5px solid #3498db; background: #fdfdfd; border-radius: 6px; }}
@@ -339,7 +337,8 @@
                  "❓ *Ajuda do Bot*\n\n"
                  "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
                  "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
-                 "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com"
+                 "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com\n"
+                 "- Ou acesse o Telegram: [@overgeared_tips](https://web.telegram.org/k/#@overgeared_tips)"
              )
              BOT.send_message(
                  chat_id=chat_id,
