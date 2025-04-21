@@ -4,48 +4,48 @@ from datetime import datetime, timedelta
 from flask import Flask, request, Response, redirect, url_for
 import telegram
 import mercadopago
- from dotenv import load_dotenv
- from threading import Thread, Lock
- import time
+from dotenv import load_dotenv
+from threading import Thread, Lock
+import time
  
- load_dotenv()
+load_dotenv()
  
- TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
- ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
- BOT = telegram.Bot(token=TELEGRAM_TOKEN)
- GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+ACCESS_TOKEN = os.getenv("MP_ACCESS_TOKEN")
+BOT = telegram.Bot(token=TELEGRAM_TOKEN)
+GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
  
  
- DB_FILE = "assinantes.json"
- TEMP_PREFS = "pagamentos_temp.json"
+DB_FILE = "assinantes.json"
+TEMP_PREFS = "pagamentos_temp.json"
  
- app = Flask(__name__)
- sdk = mercadopago.SDK(ACCESS_TOKEN)
- lock = Lock()
+app = Flask(__name__)
+sdk = mercadopago.SDK(ACCESS_TOKEN)
+lock = Lock()
  
- PLANOS = {
+PLANOS = {
      "mensal": {"valor": 19.90, "dias": 30},
      "trimestral": {"valor": 52.90, "dias": 90}
- }
+}
  
- USUARIO_ADMIN = "greedjr"
- SENHA_ADMIN = "camisa10JR"
+USUARIO_ADMIN = "greedjr"
+SENHA_ADMIN = "camisa10JR"
  
- # === Utilitários de Banco de Dados ===
+# === Utilitários de Banco de Dados ===
  
- def carregar_dados():
+def carregar_dados():
      with lock:
          if not os.path.exists(DB_FILE):
              return {}
          with open(DB_FILE, 'r') as f:
              return json.load(f)
  
- def salvar_dados(dados):
+def salvar_dados(dados):
      with lock:
          with open(DB_FILE, 'w') as f:
              json.dump(dados, f, indent=4)
  
- def salvar_temp_pagamento(preference_id, telegram_id, plano):
+def salvar_temp_pagamento(preference_id, telegram_id, plano):
      with lock:
          if os.path.exists(TEMP_PREFS):
              with open(TEMP_PREFS, 'r') as f:
@@ -56,7 +56,7 @@ import mercadopago
          with open(TEMP_PREFS, 'w') as f:
              json.dump(dados, f)
  
- def carregar_temp_pagamento(preference_id):
+def carregar_temp_pagamento(preference_id):
      with lock:
          if not os.path.exists(TEMP_PREFS):
              return None
@@ -64,19 +64,19 @@ import mercadopago
              dados = json.load(f)
          return dados.get(preference_id)
  
- # === Rota para ver e gerenciar assinantes com autenticação ===
+# === Rota para ver e gerenciar assinantes com autenticação ===
  
- import os
+import os
  
- USUARIO_ADMIN = os.getenv("USUARIO_ADMIN")
- SENHA_ADMIN = os.getenv("SENHA_ADMIN")
+USUARIO_ADMIN = os.getenv("USUARIO_ADMIN")
+SENHA_ADMIN = os.getenv("SENHA_ADMIN")
  
- @app.route("/logout")
- def logout():
+@app.route("/logout")
+def logout():
      return Response("Logout realizado.", 401, {"WWW-Authenticate": "Basic realm='Login Requerido'"})
  
- @app.route("/painel", methods=["GET", "POST"])
- def painel():
+@app.route("/painel", methods=["GET", "POST"])
+def painel():
      auth = request.authorization
      if not auth or auth.username != USUARIO_ADMIN or auth.password != SENHA_ADMIN:
          return Response("Acesso negado", 401, {"WWW-Authenticate": "Basic realm='Login Requerido'"})
@@ -225,10 +225,10 @@ import mercadopago
      return html
  
  
- # === Webhook Telegram ===
+# === Webhook Telegram ===
  
- @app.route("/", methods=["GET", "POST", "HEAD"])
- def webhook():
+@app.route("/", methods=["GET", "POST", "HEAD"])
+def webhook():
      if request.method in ["GET", "HEAD"]:
          return "Bot de pagamento está ativo."
  
@@ -364,9 +364,9 @@ import mercadopago
              )
  
      return "ok"
- # === Processamento de Pagamento ===
+# === Processamento de Pagamento ===
  
- def processar_pagamento(payment_id):
+def processar_pagamento(payment_id):
      payment_info = sdk.payment().get(payment_id)
      response = payment_info.get("response", {})
      status = response.get("status")
@@ -421,16 +421,16 @@ import mercadopago
              BOT.send_message(
      chat_id=telegram_id,
      text=f"☚ Acesse o grupo com este link (válido por 10 minutos e para 1 uso):\n{link_convite}"
- )
+)
          except Exception as e:
              print(f"Erro ao criar link de convite: {e}")
              BOT.send_message(chat_id=telegram_id, text="⚠️ Pagamento aprovado, mas houve erro ao gerar o link de convite. Contate o suporte.")
  
  
- # === Rota de Notificação Mercado Pago ===
+# === Rota de Notificação Mercado Pago ===
  
- @app.route("/notificacao", methods=["POST"])
- def notificacao():
+@app.route("/notificacao", methods=["POST"])
+def notificacao():
      data = request.json
      if not data:
          return "ignorado"
@@ -451,9 +451,9 @@ import mercadopago
  
      return "ok"
  
- # === Verificação Diária de Vencimentos ===
+# === Verificação Diária de Vencimentos ===
  
- def verificar_vencimentos():
+def verificar_vencimentos():
      while True:
          time.sleep(30)
          dados = carregar_dados()
@@ -478,9 +478,9 @@ import mercadopago
  
          salvar_dados(dados)
  
- verificacao_thread = Thread(target=verificar_vencimentos)
- verificacao_thread.daemon = True
- verificacao_thread.start()
- if __name__ == '__main__':
+verificacao_thread = Thread(target=verificar_vencimentos)
+verificacao_thread.daemon = True
+verificacao_thread.start()
+if __name__ == '__main__':
      print("Rodando localmente. Em produção, use gunicorn.")
      app.run(host='0.0.0.0', port=5000)
