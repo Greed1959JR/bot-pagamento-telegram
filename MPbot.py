@@ -1,9 +1,9 @@
 import os
- import json
- from datetime import datetime, timedelta
- from flask import Flask, request, Response, redirect, url_for
- import telegram
- import mercadopago
+import json
+from datetime import datetime, timedelta
+from flask import Flask, request, Response, redirect, url_for
+import telegram
+import mercadopago
  from dotenv import load_dotenv
  from threading import Thread, Lock
  import time
@@ -337,8 +337,8 @@ import os
                  "❓ *Ajuda do Bot*\n\n"
                  "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
                  "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
-                 "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com\n"
-                 "- Ou acesse o Telegram: [@overgeared_tips](https://web.telegram.org/k/#@overgeared_tips)"
+                 "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com\n@overgeared_tips"
+                 "- Em caso de dúvidas, envie um email para: @overgeared_tips"
              )
              BOT.send_message(
                  chat_id=chat_id,
