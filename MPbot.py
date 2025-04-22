@@ -348,7 +348,7 @@ BOT.send_message(
     ])
 )
  
-         elif query.data == "voltar_menu":
+        elif query.data == "voltar_menu":
              BOT.send_message(
                  chat_id=chat_id,
                  text="Escolha uma opção:",
