@@ -334,6 +334,21 @@ def webhook():
  
          elif query.data == "ajuda":
         ajuda_texto = (
+            "❓ *Ajuda do Bot*\n\n"
+            "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
+            "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
+            "- Em caso de dúvidas, envie um email para: overgeared1959@gmail.com\n"
+            "📬 Telegram: [@overgeared_tips](https://t.me/overgeared_tips)"
+        )
+        BOT.send_message(
+            chat_id=chat_id,
+            text=ajuda_texto,
+            parse_mode=telegram.ParseMode.MARKDOWN,
+            reply_markup=telegram.InlineKeyboardMarkup([
+                [telegram.InlineKeyboardButton("🔙 Voltar", callback_data="voltar_menu")]
+            ])
+        )
+             ajuda_texto = (
                  "❓ *Ajuda do Bot*\n\n"
                  "- Para *assinar*, clique em \"💰 Pagar (Mensal)\" ou \"💰 Pagar (Trimestral)\".\n"
                  "- Para *ver os planos*, clique em \"📄 Ver Planos\".\n"
