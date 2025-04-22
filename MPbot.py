@@ -333,26 +333,24 @@ def webhook():
             )
 
         elif query.data == "ajuda":
-    ajuda_texto = (
-        "❓ *Ajuda do Bot*\n\n"
-        "🔹 Para *assinar*, escolha uma das opções abaixo:\n"
-        "   - 💰 *Mensal*: R$19,90 por 30 dias\n"
-        "   - 💰 *Trimestral*: R$52,90 por 90 dias\n\n"
-        "🔹 Para *ver os detalhes dos planos*, toque em \"📄 Ver Planos\".\n"
-        "🔹 Em caso de dúvidas ou problemas, envie um email para:\n"
-        "📧 *overgeared1959@gmail.com*\n\n"
-        "🔔 *Fique por dentro das dicas no nosso canal oficial:*\n"
-        "👉 [@overgeared_tips](https://t.me/overgeared_tips)"
-    )
-    BOT.send_message(
-        chat_id=chat_id,
-        text=ajuda_texto,
-        parse_mode=telegram.ParseMode.MARKDOWN,
-        disable_web_page_preview=True,
-        reply_markup=telegram.InlineKeyboardMarkup([
-            [telegram.InlineKeyboardButton("🔙 Voltar", callback_data="voltar_menu")]
-        ])
-    )
+            ajuda_texto = (
+                "❓ *Ajuda do Bot*\n\n"
+                "🔹 Para *assinar*, escolha uma das opções abaixo:\n"
+                "   - 💰 *Mensal*: R$19,90 por 30 dias\n"
+                "   - 💰 *Trimestral*: R$52,90 por 90 dias\n\n"
+                "🔹 Após o pagamento, o acesso ao grupo VIP será liberado automaticamente.\n"
+                "🔹 Quando sua assinatura estiver prestes a vencer, enviaremos um aviso.\n"
+                "🔹 Você pode renovar a qualquer momento para continuar no grupo.\n\n"
+                "📩 Suporte: overgeared1959@gmail.com"
+            )
+            BOT.send_message(
+                chat_id=chat_id,
+                text=ajuda_texto,
+                parse_mode=telegram.ParseMode.MARKDOWN,
+                reply_markup=telegram.InlineKeyboardMarkup([
+                    [telegram.InlineKeyboardButton("🔙 Voltar", callback_data="voltar_menu")]
+                ])
+            )
 
         elif query.data == "voltar_menu":
             BOT.send_message(
