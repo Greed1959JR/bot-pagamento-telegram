@@ -341,6 +341,8 @@ def webhook():
                 "🔹 Após o pagamento, o acesso ao grupo VIP será liberado automaticamente.\n"
                 "🔹 Quando sua assinatura estiver prestes a vencer, enviaremos um aviso.\n"
                 "🔹 Você pode renovar a qualquer momento para continuar no grupo.\n\n"
+                "📢 *Dica:* Acompanhe nosso canal gratuito com conteúdos e dicas:\n"
+                "👉 [@overgeared_tips](https://t.me/overgeared_tips)\n\n"
                 "📩 Suporte: overgeared1959@gmail.com"
             )
             BOT.send_message(
